@@ -386,7 +386,6 @@ rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, ra
 # nTips
 # timeStep
 # t
-# taus
 # eUniqForEachG
 # selectWithinHost
 # fadingEpidemic
@@ -395,7 +394,7 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
                                rateMutate, rateTransTemplate, 
                                eUniqForEachG=FALSE, selectWithinHost=FALSE, 
                                edge=NULL, edge.length=c(), nTips=0, timeStep=1, t=0,
-                               taus=c(0:6, 8, 12, 18, 24, 30, 36, 42, 48, 54, 60), fadingEpidemic=FALSE) {
+                               fadingEpidemic=FALSE) {
   nGtps <- length(pg.init)
   if(is.null(gen)) {
     # currently the first infected individual and its donor are always of immune system type 1
@@ -409,10 +408,6 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
       ed <- rnorm(1, 0, sde[1, gen[, 'gene']])
       zd=GEValues[envd, gen[,'gene']]+ed
     }
-    gtaus <- eval(parse(text=paste0('list(', 
-                                    do.call(paste, c(as.list(paste0('gtau',0:(length(taus)-1), 
-                                                                    '=as.integer(NA)')), 
-                                                     sep=', ')), ')')))
     
     gen <- do.call(data.table, 
                    c(list(env=as.integer(gen[, 'env']), gene=as.integer(gen[, 'gene']), 
@@ -422,11 +417,7 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
                      alive=as.integer(1), active=as.integer(1), sampled=as.integer(0), 
                      envd=envd, gd=as.integer(gen[, 'gene']), ed=ed, 
                      zd=zd, taud=as.double(NA)), nrecips=0, 
-                     eventTime=as.character(t), eventCode='0', 
-                     gtaus)) 
-    
-    for(gi in 1:nGtps)
-      gen[,paste0('taug',gi):=0]
+                     eventTime=as.character(t), eventCode='0')) 
     
     nTips=0
     edge <- matrix(0, nrow=0, ncol=3)
@@ -452,12 +443,6 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
     rateRiskyContact <- rateContact
   } else {
     rateRiskyContact <- rateContact*X/N
-  }
-  
-  # report phenotypic values
-  for(itau in 1:length(taus)) {
-    gen[active&(tau*timeStep==taus[itau]), 
-        eval(parse(text=paste0('gtau', itau-1, ':=gene')))]
   }
   
   #increment times for all active
@@ -591,13 +576,6 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
           infectNew[, nrecips:=0]
           infectNew[, eventTime:=as.character(t)]
           infectNew[, eventCode:='0']
-          
-          for(itau in 1:length(taus)) {
-            infectNew[, eval(parse(text=paste0('gtau', itau-1, ':=as.integer(NA)')))]
-          }
-          
-          for(gi in 1:nGtps)
-            infectNew[,paste0('taug',gi):=0]
           
           #create new edge
           edgeNew <- cbind(gen[id%in%infectNew[, idD], nodeP], nrow(edge)+(1:nrow(infectNew)), rep(0, nrow(infectNew)))
