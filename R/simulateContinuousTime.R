@@ -63,27 +63,36 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   counts <- NULL
   
   iter <- 0
-  l <- list(N=Ninit, gen=NULL, nTips=0)
+  l <- list(N=Ninit, nTips=0)
   countActive <- 0
   fadingEpidemic <- FALSE
   done <- FALSE
+  gen <- NULL
   while(!done) {  
-    if(is.null(l$gen)|countActive==0) {
+    if(is.null(gen)|countActive==0) {
       l <- stepContTimenxNorm(l$N, nu, mu, NULL, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
                               rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
                               rateMutate=rateMutate, rateTransTemplate, 
                               eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost, 
                               timeStep=timeStep, t=iter, fadingEpidemic=fadingEpidemic)
+      if(l$hasNewInfections) {
+        gen <- rbind(l$gen, l$genNew)
+      } else {
+        gen <- l$gen
+      }
     } else {
-      l <- stepContTimenxNorm(l$N, nu, mu, l$gen, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
+      l <- stepContTimenxNorm(l$N, nu, mu, gen, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
                               rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
                               rateMutate=rateMutate, rateTransTemplate,
                               eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost,
                               edge=l$edge, edge.length=l$edge.length, nTips=l$nTips, timeStep=timeStep, t=iter, 
                               fadingEpidemic=fadingEpidemic)
+      if(l$hasNewInfections) {
+        gen <- rbind(gen, l$genNew)
+      }
     }
     
-    countActive <- nrow(l$gen[active==1])
+    countActive <- nrow(gen[active==1])
     if(fadingEpidemic & countActive==0) {
       done=TRUE
     }
@@ -95,13 +104,13 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
     iter <- iter+1
     
     if((iter*timeStep)%%1==0) {
-      cnt <- c(l$N, l$N-nrow(l$gen[alive==1]), nrow(l$gen[active==1]), nrow(l$gen[alive==1&active==0]))
+      cnt <- c(l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]))
       
       for(j in 1:nGtps)
-        cnt <- c(cnt, nrow(l$gen[active==1&gene==j]))
+        cnt <- c(cnt, nrow(gen[active==1&gene==j]))
       
       for(j in 1:nGtps)
-        cnt <- c(cnt, nrow(l$gen[sampled==1&gene==j]))
+        cnt <- c(cnt, nrow(gen[sampled==1&gene==j]))
       
       names(cnt) <- c('N', 'X', 'Y', 'Z', paste0('Y', 1:nGtps), paste0('Z', 1:nGtps))
       if(is.null(counts)) {
@@ -111,7 +120,7 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
       }
     
       if((iter*timeStep)%%reportInterval==0) {
-        cat('### Time: ', iter*timeStep, ': \n')
+        cat('### Time: ', iter*timeStep, ': nTips=', l$nTips, '\n')
         print(c(cnt[1:4], cnt[-(1:4)]/as.vector(matrix(cnt[c('Y', 'Z')], nrow=(length(cnt)-4)/2, ncol=2, byrow=TRUE))))
       }
     }
@@ -234,10 +243,22 @@ newgennxNorm <- function(pe, sde, pg.init, N, eUniqForEachG=FALSE) {
 sampleEvent <- function(rates, timeStep) {
   lambdas <- rowSums(rates)
   probs0 <- exp(-lambdas*timeStep)
-  probs <- t(apply(cbind(probs0, rates/lambdas*(1-probs0)), 1, cumsum))
-  random <- runif(nrow(rates))  
-  events <- apply(probs-random, 1, function(r) min(which(r>=0))-1)
+  #probs <- t(apply(cbind(probs0, rates/lambdas*(1-probs0)), 1, cumsum))
   
+  probs <- cbind(probs0, rates/lambdas*(1-probs0))
+  for(i in 2:ncol(probs)) {
+    probs[, i] <- probs[, i-1]+probs[, i]
+  }
+  
+  random <- runif(nrow(rates))
+  probs_random <- (probs-random)>=0
+  
+  events <- rep(0, nrow(rates))
+  for(e in ncol(rates):1) {
+    events[probs_random[, e]] <- e-1
+  }
+  
+  #events <- apply((probs-random)>=0, 1, function(r) min(which(r))-1)
   events
 }
 
@@ -256,7 +277,18 @@ infectnxNorm <- function(gen, pe, sde, pg.init, donors, eUniqForEachG=FALSE) {
 
 eSpec <- function(e, gene) {
   if(is.list(e)) {
-    sapply(seq_len(length(gene)), function(i) e[[i]][gene[i]])
+    eMat <- do.call(rbind, e)
+    es <- rep(NA, length(gene))
+    for(g in seq_len(ncol(eMat))) {
+      es[gene==g] <- eMat[gene==g, g]
+    }
+    es
+  } else if(is.matrix(e)) {
+    es <- rep(NA, length(gene))
+    for(g in seq_len(ncol(e))) {
+      es[gene==g] <- e[gene==g, g]
+    }
+    es
   } else {
     e
   }
@@ -291,12 +323,16 @@ rateTransTemplate_32 <- function() {
 # state-transition rates
 rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, rateTransTemplate, selectWithinHost) {
   if(selectWithinHost) {
-    nGtps <- ncol(eMatrix)  
-    gother <- matrix(sapply(genes, function(g) (1:nGtps)[-g]), nrow=length(genes), byrow=TRUE)
-    envsother <- matrix(apply(cbind(eMatrix, genes), 1, function(envsg) envsg[-c(envsg[length(envsg)], length(envsg))]),
-                        nrow=length(genes), byrow=TRUE)
+    gtps <- seq_len(ncol(eMatrix))
+    gother <- matrix(NA, nrow=length(genes), ncol=ncol(eMatrix)-1, byrow=TRUE)
+    envsother <- matrix(NA, nrow(eMatrix), ncol(eMatrix)-1)
+    for(g in gtps) {
+      gother[genes==g, ] <- gtps[-g]
+      envsother[genes==g, ] <- eMatrix[genes==g, -g]
+    }
+    # is the mutation to other beneficial?
     sgnother <- sapply(1:(ncol(gother)), function(i) {
-      as.double(GEValues[cbind(envs, gother[, i])] + envsother[, i] > z)  
+      as.integer(GEValues[cbind(envs, gother[, i])] + envsother[, i] > z)  
     })
     
     matrix(sgnother*rateTransTemplate[genes, ]*rates, nrow=length(z))
@@ -365,7 +401,6 @@ rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, ra
 # dtng[, rateStateTransition(z, r, do.call(rbind, e), es, env, gene, spVL, rateMatrixOthersTemplate_32(), TRUE)]
 # dtng
 
-
 # X: current number of susceptible individuals
 # nu: birth rate
 # mu: natural per capita death rate
@@ -396,6 +431,8 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
                                edge=NULL, edge.length=c(), nTips=0, timeStep=1, t=0,
                                fadingEpidemic=FALSE) {
   nGtps <- length(pg.init)
+  newInfections <- FALSE
+  hasGen <- FALSE
   if(is.null(gen)) {
     # currently the first infected individual and its donor are always of immune system type 1
     gen <- newgennxNorm(c(1, 0), sde, pg.init, 1, eUniqForEachG)
@@ -422,7 +459,7 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
     nTips=0
     edge <- matrix(0, nrow=0, ncol=3)
     edge.length <- c()
-
+    hasGen <- TRUE
   } 
   
   # number of susceptible individuals
@@ -445,23 +482,28 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
     rateRiskyContact <- rateContact*X/N
   }
   
+  # will use this a lot, so cache it.
+  isActive <- gen[, active==1]
+  
   #increment times for all active
   # tau: age of infection
   # tauP: time since previous transmission
-  gen[active==1, tau:=tau+1]
-  gen[active==1, tauP:=tauP+1]
+  gen[isActive, tau:=tau+1]
+  gen[isActive, tauP:=tauP+1]
   
   # sample events that happen at this timeStep for some of the actives
-  envs <- gen[active==1, env]
-  genes <- gen[active==1, gene]
-  es <- gen[active==1, eSpec(e, gene)]
+  envs <- gen[isActive, env]
+  genes <- gen[isActive, gene]
+  
+  eMatrix <- gen[isActive, do.call(rbind, e)]
+  es <- gen[isActive, eSpec(eMatrix, gene)]
+  
   zs <- GEValues[cbind(envs, genes)]+es
   
   ratesSample <- rep(rateSample, length(zs))
   ratesDie <-  rateDie(zs, mu)        
   ratesInfect <- rateInfect(zs, rateRiskyContact)   
   
-  eMatrix <- gen[active==1, do.call(rbind, e)]
   ratesMutate <- rateMutate(GEValues, es, envs, genes)
   
   ratesTrans <- rateStateTransition(zs, ratesMutate, eMatrix, es, envs, genes, 
@@ -482,21 +524,21 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
   
   if(any(events>0)) {
     activeEvents <- rep(FALSE, nrow(gen))
-    activeEvents[gen[, active==1]] <- events>0
+    activeEvents[isActive] <- events>0
     gen[activeEvents, eventTime:=paste0(eventTime, ',', t)]
     gen[activeEvents, eventCode:=paste0(eventCode, ',', events[events>0])]
     
     sampledNew <- rep(FALSE, nrow(gen))
-    sampledNew[gen[, active==1]] <- (events==1)
+    sampledNew[isActive] <- (events==1)
     
     deadNew <- rep(FALSE, nrow(gen))
-    deadNew[gen[, active==1]] <- (events==2)
+    deadNew[isActive] <- (events==2)
     
     donorsNew <- rep(FALSE, nrow(gen))
-    donorsNew[gen[, active==1]] <- (events==3)
+    donorsNew[isActive] <- (events==3)
     
     mutatedNew <- rep(0, nrow(gen))
-    mutatedNew[gen[, active==1]][events>3] <- events[events>3]-3
+    mutatedNew[isActive][events>3] <- events[events>3]-3
     
     if(any(sampledNew)) {
       if(sum(sampledNew) > 0) {
@@ -546,6 +588,7 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
         infectNew <- infectnxNorm(gen, pe, sde, pg.init, donorsNew, eUniqForEachG) 
         
         if(!is.null(infectNew)) {
+          newInfections <- TRUE
           infectNew[, id:=as.integer(nrow(gen)+(1:nrow(infectNew)))]
           infectNew[, tinf:=t]
           infectNew[, tau:=0]
@@ -580,12 +623,19 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
           
           edge <- rbind(edge, edgeNew)
           edge.length=c(edge.length, edgeLengthNew)
-          gen <- rbind(gen, infectNew)
+          
         }
       }
     }
   }
-  
-  list(N=N, gen=gen, edge=edge, edge.length=edge.length, nTips=nTips)
+    
+  res <- list(N=N, hasGen=hasGen, hasNewInfections=newInfections, edge=edge, edge.length=edge.length, nTips=nTips)
+  if(hasGen) {
+    res$gen <- gen
+  }
+  if(newInfections) {
+    res$genNew <- infectNew
+  }
+  res
 }
 

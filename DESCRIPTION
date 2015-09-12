@@ -10,3 +10,4 @@ Description: This package provides functions to simulate the chain of transmissi
   genome associated with a pathogen trait. 
 License: GPL (>=2.0)
 Depends: ape, data.table
+KeepSource: TRUE
