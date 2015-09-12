@@ -104,7 +104,7 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
     iter <- iter+1
     
     if((iter*timeStep)%%1==0) {
-      cnt <- c(l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]))
+      cnt <- c(l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]), mean(l$zActive))
       
       for(j in 1:nGtps)
         cnt <- c(cnt, nrow(gen[active==1&gene==j]))
@@ -112,7 +112,7 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
       for(j in 1:nGtps)
         cnt <- c(cnt, nrow(gen[sampled==1&gene==j]))
       
-      names(cnt) <- c('N', 'X', 'Y', 'Z', paste0('Y', 1:nGtps), paste0('Z', 1:nGtps))
+      names(cnt) <- c('N', 'X', 'Y', 'Z', 'meanActive', paste0('Y', 1:nGtps), paste0('Z', 1:nGtps))
       if(is.null(counts)) {
         counts <- cnt
       } else {
@@ -121,12 +121,15 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
     
       if((iter*timeStep)%%reportInterval==0) {
         cat('### Time: ', iter*timeStep, ': nTips=', l$nTips, '\n')
-        print(c(cnt[1:4], cnt[-(1:4)]/as.vector(matrix(cnt[c('Y', 'Z')], nrow=(length(cnt)-4)/2, ncol=2, byrow=TRUE))))
+        print(c(cnt[1:5], cnt[-(1:5)]/as.vector(matrix(cnt[c('Y', 'Z')], nrow=(length(cnt)-5)/2, ncol=2, byrow=TRUE))))
       }
     }
   }
   
-  c(l, list(time=timeStep*iterActive, timeFading=timeStep*iter, timeStep=timeStep, rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, rateMutate=rateMutate, eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost, counts=counts,...))
+  c(l[c('N', 'edge', 'edge.length', 'nTips')], 
+    list(gen=gen, time=timeStep*iterActive, timeFading=timeStep*iter, timeStep=timeStep, rateContact=rateContact, 
+         rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, rateMutate=rateMutate, eUniqForEachG=eUniqForEachG, 
+         selectWithinHost=selectWithinHost, counts=counts,...))
 }
 
 #' Transmission chain between sampled individuals in an epidemic
@@ -243,8 +246,7 @@ newgennxNorm <- function(pe, sde, pg.init, N, eUniqForEachG=FALSE) {
 sampleEvent <- function(rates, timeStep) {
   lambdas <- rowSums(rates)
   probs0 <- exp(-lambdas*timeStep)
-  #probs <- t(apply(cbind(probs0, rates/lambdas*(1-probs0)), 1, cumsum))
-  
+ 
   probs <- cbind(probs0, rates/lambdas*(1-probs0))
   for(i in 2:ncol(probs)) {
     probs[, i] <- probs[, i-1]+probs[, i]
@@ -254,11 +256,10 @@ sampleEvent <- function(rates, timeStep) {
   probs_random <- (probs-random)>=0
   
   events <- rep(0, nrow(rates))
-  for(e in ncol(rates):1) {
+  for(e in ncol(probs_random):1) {
     events[probs_random[, e]] <- e-1
   }
   
-  #events <- apply((probs-random)>=0, 1, function(r) min(which(r))-1)
   events
 }
 
@@ -324,15 +325,19 @@ rateTransTemplate_32 <- function() {
 rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, rateTransTemplate, selectWithinHost) {
   if(selectWithinHost) {
     gtps <- seq_len(ncol(eMatrix))
-    gother <- matrix(NA, nrow=length(genes), ncol=ncol(eMatrix)-1, byrow=TRUE)
-    envsother <- matrix(NA, nrow(eMatrix), ncol(eMatrix)-1)
+    gtpsMatrix <- matrix(gtps, nrow=nrow(eMatrix), ncol=ncol(eMatrix), byrow=TRUE)
+    
+    gother <- matrix(NA, nrow=nrow(eMatrix), ncol=ncol(eMatrix)-1)
+    envsother <- matrix(NA, nrow=nrow(eMatrix), ncol=ncol(eMatrix)-1)
     for(g in gtps) {
-      gother[genes==g, ] <- gtps[-g]
-      envsother[genes==g, ] <- eMatrix[genes==g, -g]
+      geneg <- genes==g
+      gother[geneg, ] <- gtpsMatrix[geneg, -g]
+      envsother[geneg, ] <- eMatrix[geneg, -g]
     }
+    
     # is the mutation to other beneficial?
     sgnother <- sapply(1:(ncol(gother)), function(i) {
-      as.integer(GEValues[cbind(envs, gother[, i])] + envsother[, i] > z)  
+      as.double(GEValues[cbind(envs, gother[, i])] + envsother[, i] > z)  
     })
     
     matrix(sgnother*rateTransTemplate[genes, ]*rates, nrow=length(z))
@@ -340,66 +345,6 @@ rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, ra
     matrix(rateTransTemplate[genes, ]*rates, nrow=length(z))
   }
 }
-
-# Test rate state transition:
-# rateMatrix_32 <- function(v) {
-#   rbind(
-#     c(-2*v, v, v/2, 0, v/2, 0),
-#     c(v, -2*v, 0, v/2, 0, v/2),
-#     c(v/2, 0, -2*v, v, v/2, 0),
-#     c(0, v/2, v, -2*v, 0, v/2),
-#     c(v/2, 0, v/2, 0, -2*v, v),
-#     c(0, v/2, 0, v/2, v, -2*v))
-# }
-# 
-# 
-# 
-# # test that matrix exponentiation works for the transition probabilities between sequencies of 2 sites
-# rateMatrix_3 <- function(v) {
-#   rbind(
-#     c(-v, v/2, v/2),
-#     c(v/2, -v, v/2),
-#     c(v/2, v/2, -v))
-# }
-# 
-# rateMatrix_2 <- function(v) {
-#   rbind(
-#     c(-v, v),
-#     c(v, -v))
-# }
-# 
-# library(expm)
-# t <- 2
-# v <- .0213
-# Q <- rateMatrix_32(v)
-# Q1 <- rateMatrix_3(v)
-# Q2 <- rateMatrix_2(v)
-# 
-# pt <- expm(Q*t)%*%c(1, 0, 0, 0, 0, 0)
-# p1t <- expm(Q1*t)%*%c(1, 0, 0)
-# p2t <- expm(Q2*t)%*%c(1, 0)
-# 
-# all.equal(p1t%*%t(p2t), matrix(pt, 3, 2, byrow=TRUE))
-# 
-# 
-# # test rateMutate
-# spVL <- normReactMat(genotypeXenv, GE.case5)
-# ng <- newgennxNorm(c(.5, .5), .6, rep(1/6, 6), 10, 6, FALSE)
-# dtng <- do.call(data.table, 
-#                 list(env=ng[, 'env'], gene=ng[, 'gene'], e=lapply(seq_len(nrow(ng)), function(i) ng[i, 2+(1:6)])))
-# dtng[, v:=calcValue(env, gene, e, spVL)]      
-# dtng[, es:=eSpec(e, gene)]
-# dtng[, ge:=spVL[cbind(env, gene)]]
-# dtng[, geneo:=ifelse(gene==1, 2, 1)]
-# dtng[, geo:=spVL[cbind(env, geneo)]]
-# dtng[, eo:=eSpec(e, geneo)]
-# dtng[, vo:=calcValue(env, geneo, e, spVL)]
-# dtng[, delta:=sign(vo-v)]
-# dtng[, z:=spVL[cbind(env, gene)]+es]
-# dtng[, r:=rateMutate(spVL, es, env, gene)]
-# 
-# dtng[, rateStateTransition(z, r, do.call(rbind, e), es, env, gene, spVL, rateMatrixOthersTemplate_32(), TRUE)]
-# dtng
 
 # X: current number of susceptible individuals
 # nu: birth rate
@@ -629,7 +574,7 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
     }
   }
     
-  res <- list(N=N, hasGen=hasGen, hasNewInfections=newInfections, edge=edge, edge.length=edge.length, nTips=nTips)
+  res <- list(N=N, hasGen=hasGen, hasNewInfections=newInfections, edge=edge, edge.length=edge.length, nTips=nTips, zActive=zs)
   if(hasGen) {
     res$gen <- gen
   }
