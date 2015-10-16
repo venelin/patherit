@@ -6,8 +6,8 @@
 simulateEpidemic(Ninit = Inf, nu = 0, mu = 1/850, pe, sde, pg.init,
   GEValues, rateContact, rateInfect, rateDie, rateSample, rateMutate,
   rateTransTemplate, eUniqForEachG = FALSE, selectWithinHost = FALSE,
-  timeStep = 0.1, maxTime = 1200, maxNTips = 8000, reportInterval = 12,
-  ...)
+  timeStep = 0.1, maxTime = 1200, maxNTips = 8000,
+  expandTimeAfterMaxNTips = 1.5, reportInterval = 12, ...)
 }
 \arguments{
 \item{Ninit}{integer, initial population size}
@@ -60,6 +60,9 @@ sampled.}
 \item{maxTime}{numeric, the maximum duration of a simulation before starting the graceful fade-away phase.}
 
 \item{maxNTips}{numeric, the maximum number of sampled individuals before starting the graceful fade-away phase.}
+
+\item{expandTimeAfterMaxNTips}{numeric greater or equal than 1 specifying how lone should the growth of the epidemic
+continue after reaching maxNTips or running the epidemic for maxTime/expandTimeAfterMaxNTips.}
 
 \item{reportInterval}{positive integer, time interval at which some statistics such as total infected and
 recovered counts and frequencies of genotypes in the population are stored.}

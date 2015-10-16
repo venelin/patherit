@@ -3,10 +3,13 @@
 \alias{makeTree}
 \title{Transmission chain between sampled individuals in an epidemic}
 \usage{
-makeTree(epideimic)
+makeTree(epidemic, tMin = 0, tMax = Inf)
 }
 \arguments{
 \item{epidemic}{list returned by simulateEpidemic}
+
+\item{tMin,tMax}{numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be
+the times of sampling for the individuals; Currently these two paraemters are not implemented.}
 }
 \description{
 Transmission chain between sampled individuals in an epidemic

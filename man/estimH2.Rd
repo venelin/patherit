@@ -3,8 +3,8 @@
 \alias{estimH2}
 \title{Broad-sense heritability of a pathogen trait}
 \usage{
-estimH2(epidemic, GEValues, sampledOnly = TRUE, tinfMin = 0,
-  tinfMax = Inf)
+estimH2(epidemic, GEValues, sampledOnly = TRUE, activeOnly = FALSE,
+  tMin = 0, tMax = Inf, lastN = Inf)
 }
 \arguments{
 \item{epidemic}{a list of objects returned from simulateEpidemic}
@@ -13,7 +13,8 @@ estimH2(epidemic, GEValues, sampledOnly = TRUE, tinfMin = 0,
 
 \item{sampledOnly}{logical, indicating if only sampled individuals should be included in the heritability calculation}
 
-\item{tinfMin,tinfMax}{numeric, time interval for which to measure the heritability}
+\item{tMin,tMax}{numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be
+the times of sampling for the individuals; otherwise, this would be the times of infection.}
 }
 \value{
 numeric indicating the estimated heritability for infected individuals in the population.
