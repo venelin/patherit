@@ -3,15 +3,23 @@
 \alias{makeTree}
 \title{Transmission chain between sampled individuals in an epidemic}
 \usage{
-makeTree(epidemic, tMin = 0, tMax = Inf)
+makeTree(epidemic, tips = NULL, idTips = NULL)
 }
 \arguments{
 \item{epidemic}{list returned by simulateEpidemic}
 
-\item{tMin,tMax}{numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be
-the times of sampling for the individuals; Currently these two paraemters are not implemented.}
+\item{tips,idTips}{integer vectors (see details)}
 }
 \description{
 Transmission chain between sampled individuals in an epidemic
+}
+\details{
+By default all individuals sampled during the active phase of the epidemic are
+included in the phylogeny. If specified, the argument tips has priority to the arugment
+idTips. The argument tips is sorted in increasing order and specifies the tip indices
+(numbers in the range 1:epidemic$nTips) to be retained in the phylogeny. If NULL (default),
+the argument idTips is used to identify which individuals to be included in the phylogeny.
+This is useful if, for example, one has searched all individuals who were sampled during
+a specified time interval of the epidemic.
 }
 

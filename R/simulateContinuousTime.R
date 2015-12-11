@@ -206,27 +206,55 @@ normReactMat <- function(genotypeXenv, GE) {
   normReactPlot(genotypeXenv, GE, do.plot=F)
 }
 
+
 #' Transmission chain between sampled individuals in an epidemic
 #' @param epidemic list returned by simulateEpidemic
-#' @param tMin,tMax numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be 
-#'    the times of sampling for the individuals; Currently these two paraemters are not implemented.
+#' @param tips,idTips integer vectors (see details)
+#' @details By default all individuals sampled during the active phase of the epidemic are 
+#' included in the phylogeny. If specified, the argument tips has priority to the arugment 
+#' idTips. The argument tips is sorted in increasing order and specifies the tip indices 
+#' (numbers in the range 1:epidemic$nTips) to be retained in the phylogeny. If NULL (default), 
+#' the argument idTips is used to identify which individuals to be included in the phylogeny. 
+#' This is useful if, for example, one has searched all individuals who were sampled during 
+#' a specified time interval of the epidemic.
 #' @export
-makeTree <- function(epidemic, tMin=0, tMax=Inf) {
+makeTree <- function(epidemic, tips=NULL, idTips=NULL) {
   gen <- copy(epidemic$gen)
-  gen[, timeObs:=(tinf+tau)*epidemic$timeStep]
-  
-  edge <- epidemic$edge
   edge.length <- epidemic$edge.length
-  nTips <- epidemic$nTips
-  timeStep <- epidemic$timeStep
+  
+  if(is.null(idTips)&is.null(tips)) {
+    tips <- 1:epidemic$nTips
+    edge <- epidemic$edge
+    nTips <- epidemic$nTips 
+  } else {
+    if(is.null(tips)) {
+      # get tips from idTips
+      tips <- sort(gen[id%in%idTips, tip])
+    }  
+    nTips <- length(tips)
+    edge <- epidemic$edge
+ 
+    edge[, 3] <- 0
+    etips <- match(-tips, edge[, 2])
+    edge[etips, 3] <- 1
+    nodeP <- edge[etips, 1]
+    while(!(length(nodeP)==1&nodeP[1]==0) & any(edge[nodeP, 3]==0)) {
+      edge[nodeP, 3] <- 1
+      nodeP <- edge[nodeP, 1]
+    } 
+  }
+  
   if(nTips <= 1)
     return(NULL)
+  
+  # the 3rd column in edge matrix is 1 if the edge participates on the route from a tip to the root.
+  edge.length <- edge.length[edge[,3]==1]
+  edge <- edge[edge[,3]==1, 1:2]
+  
   cat('Generating tree: nTips=',nTips, ', number of uncollapsed edges=', nrow(edge), '\n')
-  if(ncol(edge)==3) {
-    edge.length <- edge.length[edge[,3]==1]
-    edge <- edge[edge[,3]==1, 1:2]
-  }
-  edge <- apply(edge, 1:2, function(x) if(x<0) -x else x+nTips+1)
+  
+  nTipsAll <- epidemic$nTips
+  edge <- apply(edge, 1:2, function(x) if(x<0) -x else x+nTipsAll+1)
   nodesUnique <- sort(unique(as.vector(edge)))
   
   Nnode <- length(nodesUnique)-nTips
@@ -234,20 +262,36 @@ makeTree <- function(epidemic, tMin=0, tMax=Inf) {
   edge[, 1] <- match(edge[, 1], nodesUnique)
   edge[, 2] <- match(edge[, 2], nodesUnique)
   
-  tipl <- gen[tip!=0, list(id, tip, timeObs)]
+  tipl <- gen[tip%in%tips, list(id, tip)]
   setkey(tipl, tip)
   colnames(edge) <- NULL
-  obj <- list(edge=edge, edge.length=edge.length, tip.label=tipl[,id], node.label=nodesUnique[-(1:nTips)]-nTips-1, Nnode=Nnode)
+  obj <- list(edge=edge, edge.length=edge.length, tip.label=tipl[,id], node.label=nodesUnique[-(1:nTips)]-nTipsAll-1, Nnode=Nnode)
   class(obj) <- 'phylo'
-  if(tMin!=0|!is.infinite(tMax)) {
-    cat('Dropping tips outside of time interval :', tMin, ',', tMax, '\n')
-    
-    #obj <- drop.tip(obj, tip=c(tipl[timeObs<tMin, tip], tipl[timeObs>tMax, tip]), trim.internal=TRUE)
-  }
   obj <- collapse.singles(obj)
-  obj$edge.length <- obj$edge.length*timeStep
+  obj$edge.length <- obj$edge.length*epidemic$timeStep
   obj
 }
+
+#' @export
+extractPop <- function(epidemic, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
+  if(is.null(epidemic)) {
+    warning('Parameter epidemic is NULL. Returning NULL.')
+    NULL
+  } else {
+    pop <- copy(epidemic$gen[sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & active>=ifelse(activeOnly, 1, 0), ])
+    if(sampledOnly) {
+      pop[, timeObs:=(tinf+tau)*epidemic$timeStep]
+    } else {
+      pop[, timeObs:=tinf*epidemic$timeStep]
+    }
+    pop <- pop[timeObs>=tMin&timeObs<=tMax]
+    if(lastN<nrow(pop)) {
+      pop <- pop[(nrow(pop)-lastN+1):nrow(pop)]
+    }
+    pop
+  }
+}
+
 
 #' @export
 extractDRCouples <- function(epidemic, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf) {
@@ -711,32 +755,31 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
     mutatedNew <- rep(0, nrow(gen))
     mutatedNew[isActive][events>3] <- events[events>3]-3
     
-    if(any(sampledNew)) {
-      if(sum(sampledNew) > 0) {
-        if(!fadingEpidemic) {
-          gen[sampledNew, sampled:=as.integer(1)]
-          gen[sampledNew, tip:=(nTips+(1:sum(sampledNew)))]
-          
-          edgeNew <- gen[sampledNew, list(nodeP, -tip)]
-          edgeLengthNew <- gen[sampledNew, tauP]
-          
-          nTips <- nTips+nrow(edgeNew)
-          edge <- rbind(edge, cbind(as.matrix(edgeNew), rep(1, nrow(edgeNew))))
-          edge.length <- c(edge.length, edgeLengthNew)
-          
-          nodeP <- edgeNew[, nodeP]
-          while(!(length(nodeP)==1&nodeP[1]==0) & any(edge[nodeP, 3]==0)) {
-            edge[nodeP, 3] <- 1
-            nodeP <- edge[nodeP, 1]
-          } 
-          gen[sampledNew, active:=as.integer(0)]  
-        } else {
-          gen[sampledNew, sampled:=as.integer(2)]
-          gen[sampledNew, active:=as.integer(0)] 
-        }
+    if(sum(sampledNew) > 0) {
+      if(!fadingEpidemic) {
+        gen[sampledNew, sampled:=as.integer(1)]
+        gen[sampledNew, tip:=(nTips+(1:sum(sampledNew)))]
+        
+        edgeNew <- gen[sampledNew, list(nodeP, -tip)]
+        edgeLengthNew <- gen[sampledNew, tauP]
+        
+        nTips <- nTips+nrow(edgeNew)
+        edge <- rbind(edge, cbind(as.matrix(edgeNew), rep(1, nrow(edgeNew))))
+        edge.length <- c(edge.length, edgeLengthNew)
+        
+        nodeP <- edgeNew[, nodeP]
+        while(!(length(nodeP)==1&nodeP[1]==0) & any(edge[nodeP, 3]==0)) {
+          edge[nodeP, 3] <- 1
+          # this works because for non-tips edge[, 2] is the same as the line-number in edge
+          nodeP <- edge[nodeP, 1]
+        } 
+        gen[sampledNew, active:=as.integer(0)]  
+      } else {
+        gen[sampledNew, sampled:=as.integer(2)]
+        gen[sampledNew, active:=as.integer(0)] 
       }
     }
-    
+
     if(any(deadNew)) {
       gen[deadNew, active:=as.integer(0)]
       gen[deadNew, alive:=as.integer(0)]
