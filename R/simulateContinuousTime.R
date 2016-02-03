@@ -272,6 +272,15 @@ makeTree <- function(epidemic, tips=NULL, idTips=NULL) {
   obj
 }
 
+#' Extract a sub-population of individuals involved in an epidemic
+#' @param epidemic a list representing an epidemic (as returned by simulateEpidemic)
+#' @param sampledOnly a logical indicating whether only recovered individuals should be extracted
+#' @param activeOnly a logical indicating whether only currently infected and alive individuals should be extracted
+#' @param tMin,tMax a numericals indicating the interval of observation times for extracted individuals. If sampledOnly is 
+#' TRUE the observation time is the time of sampling (recovery), otherwise it is the time of infection. Default: tMin=0, tMax=Inf.
+#' @param lastN numeric indicating whether to return only the most recently observed lastN individuals (default is Inf)
+#' 
+#' @return a data.table with rows corresponding to the extracted individuals
 #' @export
 extractPop <- function(epidemic, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
   if(is.null(epidemic)) {
@@ -292,7 +301,29 @@ extractPop <- function(epidemic, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMa
   }
 }
 
-
+#' Extract donor-recipient couples from an epidemic
+#' @param epidemic a list representing an epidemic (as returned by simulateEpidemic)
+#' @param sampledOnly a logical indicating whether only recovered individuals should be extracted
+#' @param activeOnly a logical indicating whether only currently infected and alive individuals should be extracted
+#' @param tMin,tMax a numericals indicating the interval of observation times for extracted individuals. If sampledOnly is 
+#' TRUE the observation time is the time of sampling (recovery), otherwise it is the time of infection. Default: tMin=0, tMax=Inf.
+#'
+#' @return a data.table with rows corresponding to the extracted couples with the following columns:
+#' idD: id of the donor
+#' id: id of the recipient
+#' envd: environment type of the donor
+#' gd: transmitted strain from the donor to the recipient
+#' ed: donor special environmental effect at the moment of transmission
+#' env: environment type of the recipient
+#' gene: strain in the recipient at the moment of sampling or at the current moment
+#' e: special environmental effects of the recipient
+#' tauR: age of infection in the recipient (in timeStep units)
+#' tauDAtInf: age of infection in the donor at the moment of transmission (in timeStep units)
+#' tauD: time (in timeStep units) in the donor from the moment of transmission until the moment of sampling or the current moment 
+#' taum: =tauD+tauR
+#' eD: special environmental effect in the donor at the moment of sampling
+#' gD: strain in the donor at the moment of sampling
+#' 
 #' @export
 extractDRCouples <- function(epidemic, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf) {
   gen <- copy(epidemic$gen[sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & active>=ifelse(activeOnly, 1, 0), ])
@@ -303,8 +334,48 @@ extractDRCouples <- function(epidemic, sampledOnly=TRUE, activeOnly=FALSE, tMin=
     gen[, timeObs:=tinf*epidemic$timeStep]
   }
   gen <- gen[timeObs>=tMin&timeObs<=tMax]
-  gen[idD%in%id, list(idD, id, envd, gd, ed, env, gene, e)]
+  setkey(gen, id)
+  couples <- gen[idD%in%id, list(idD, id, envd, gd, ed, env, gene, e, tauR=tau, tauDAtInf=taud)]
+  couples[, tauD:=gen[J(couples[, idD]), tau]-tauDAtInf]
+  couples[, taum:=tauD+tauR]
+  couples[, eD:=gen[J(couples[, idD]), eSpec(e, gene)]]
+  couples[, gD:=gen[J(couples[, idD]), gene]]
+  couples
 }
+
+#' Decompose trait values according to the model z=G+I+E+epsilon
+#' @param data a data.table returned by extractPop
+#' @param GEValues a matrix of GEValues
+#' @export
+decomposeTrait <- function(data, GEValues) {
+  values <- copy(data)
+  N <- nrow(data)
+  values[, z:=calcValue(env, gene, e, GEValues)]
+  
+  mu <- values[, mean(z)]
+  
+  # calculate genotypic values (grouping by genotype)
+  values <- values[, G:=mean(z), by=gene]
+  
+  # calculate environmental values (grouping by env-type)
+  values <- values[, E:=mean(z)-mu, by=env]
+  
+  # genotype by environment interaction
+  values <- values[, I:=mean(z-G-E), by=list(env, gene)]
+  
+  # special environmental effects
+  values <- values[, epsilon:=z-G-E-I]
+  
+  values
+}
+
+
+#' Variance decomposition of trait values 
+#'@export
+decomposeVar <- function(data) {
+    data[, c(varz=var(z), varG=var(G), varE=var(E), varI=var(I), varEpsilon=var(epsilon), covGE=cov(G,E))]
+}
+
 
 #' Regression slope of recipient on donor values in an epidemic
 #' @param sampledOnly logical, indicating if only sampled individuals should be included in the heritability calculation
@@ -397,6 +468,124 @@ estimMean <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tM
   }
 }
 
+#' @export
+estimSD <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
+  if(is.null(epidemic)) {
+    warning('Parameter epidemic is NULL. Returning NA.')
+    NA
+  } else {
+    gen <- copy(epidemic$gen[sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & active>=ifelse(activeOnly, 1, 0), ])
+    
+    if(sampledOnly) {
+      gen[, timeObs:=(tinf+tau)*epidemic$timeStep]
+    } else {
+      gen[, timeObs:=tinf*epidemic$timeStep]
+    }
+    gen <- gen[timeObs>=tMin&timeObs<=tMax]
+    if(lastN<nrow(gen)) {
+      gen <- gen[(nrow(gen)-lastN+1):nrow(gen)]
+    }
+    if(nrow(gen)>0) {
+      gen[, z:=calcValue(env, gene, e, GEValues)]
+      gen[, sd(z, na.rm=TRUE)]
+    }
+  }
+}
+
+#' @export
+estimQuantile <- function(epidemic, GEValues, prob=.5, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
+  if(is.null(epidemic)) {
+    warning('Parameter epidemic is NULL. Returning NA.')
+    NA
+  } else {
+    gen <- copy(epidemic$gen[sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & active>=ifelse(activeOnly, 1, 0), ])
+    
+    if(sampledOnly) {
+      gen[, timeObs:=(tinf+tau)*epidemic$timeStep]
+    } else {
+      gen[, timeObs:=tinf*epidemic$timeStep]
+    }
+    gen <- gen[timeObs>=tMin&timeObs<=tMax]
+    if(lastN<nrow(gen)) {
+      gen <- gen[(nrow(gen)-lastN+1):nrow(gen)]
+    }
+    if(nrow(gen)>0) {
+      gen[, z:=calcValue(env, gene, e, GEValues)]
+      gen[, quantile(z, na.rm=TRUE)]
+    }
+  }
+}
+
+#' Estimating broad-sense heritability through ANOVA
+#' @param epidemic a list of objects returned from simulateEpidemic
+#' @param NULL or a data.table such as the element gen in an epidemic list
+#' @param GEValues genotype-environment trait values
+#' @param by a character string which can be evaluated as expression in the by clause of data.table
+#' @param sampledOnly logical, indicating if only sampled individuals should be included in the heritability calculation
+#' @param tMin,tMax numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be 
+#' the times of sampling for the individuals; otherwise, this would be the times of infection.
+#' @export
+estimH2aov <- function(epidemic=NULL, data=NULL, GEValues=NULL, by=list('gene'), sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf, report=FALSE) {
+  if(is.null(epidemic)&is.null(data)) {
+    warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')
+    NA
+  } else if(!is.null(data)) {
+    pop <- data
+  } else {
+    pop <- copy(extractPop(epidemic, sampledOnly, activeOnly, tMin, tMax, lastN))
+  }
+  if(nrow(pop)>0) {
+    if(!is.null(GEValues)) {
+      pop[, z:=calcValue(env, gene, e, GEValues)]
+    }
+    
+    # numbers of indivs in groups
+    nums <- pop[, list(ni=length(z)), by=eval(parse(text=by))]
+    
+    # total number of individuals
+    N <- nums[, sum(ni)]
+    
+    #number of groups
+    K <- nrow(nums)
+    
+    # weighted mean number of individuals in each group
+    n0 <- nums[, (N-sum(ni^2/N))/(K-1)]
+    
+    # grand mean
+    zBar <- pop[, mean(z)]
+    
+    # Total sum of squares
+    SSt <- pop[, sum((z-zBar)^2)]
+    
+    # gruop means assigned to each row to facilitate sums of squares
+    pop[, zBari:=mean(z), by=eval(parse(text=by))]
+    
+    # sum of squares between groups
+    SSb <- pop[, sum((zBari-zBar)^2)]
+    
+    # sum of squares within groups
+    SSe <- pop[, sum((z-zBari)^2)]
+    
+    # mean square between
+    MSb <- SSb/(K-1)
+    # mean square within
+    MSe <- SSe/(N-K)
+    
+    sigma2G <- (MSb-MSe)/n0
+    sigma2E <- MSe
+    
+    if(report) {
+      list(H2aov=sigma2G/(sigma2G+sigma2E), pop=pop, N=N, K=K, nums=nums, SSt=SSt, SSb=SSb, SSe=SSe, MSb=MSb, MSe=MSe, n0=n0, 
+           F=MSb/MSe, sigma2G=sigma2G, sigma2E=sigma2E)
+    } else {
+      sigma2G/(sigma2G+sigma2E)
+    }
+  } else {
+    NA
+  }
+  
+}
+
 #' Breeding heritability of a pathogen trait
 #' @param epidemic a list of objects returned from simulateEpidemic
 #' @param GEValues genotype-environment trait values
@@ -426,13 +615,13 @@ estimH2b <- function(epidemic, GEValues, atInfection=FALSE, sampledOnly=TRUE, ac
       couples <- gen[idD%in%id, list(idD, id, envd, gd, ed, env, gene, e, tauR=tau, tauDAtInf=taud)]
       couples[, tauD:=gen[J(couples[, idD]), tau]-tauDAtInf]
       couples[, taum:=tauD+tauR]
-      
+      couples[, zD0:=calcValue(envd, gd, ed, GEValues)]  
+
       if(nrow(couples) > 0) {
         if(atInfection) {
-          couples[, zD0:=calcValue(envd, gd, ed, GEValues)]
           couples[, zR0:=calcValue(env, gd, e, GEValues)]
           couples[, bD0:=mean(zR0), by=gd]
-          H2b0 <- couples[, var(bD0)/var(zD0)]
+          H2b0 <- couples[, var(bD0)/var(zR0)]
           if(report) {
             list(H2b0=H2b0, couples=couples)
           } else {
@@ -442,7 +631,7 @@ estimH2b <- function(epidemic, GEValues, atInfection=FALSE, sampledOnly=TRUE, ac
           couples[, zD:=gen[J(couples[, idD]), calcValue(env, gene, e, GEValues)]]
           couples[, zR:=calcValue(env, gene, e, GEValues)]
           couples[, bD:=mean(zR), by=gd]
-          H2b <- couples[, var(bD)/var(zD)]
+          H2b <- couples[, var(bD)/var(zR)]
           if(report) {
             list(H2b=H2b, couples=couples)
           } else {
@@ -457,6 +646,7 @@ estimH2b <- function(epidemic, GEValues, atInfection=FALSE, sampledOnly=TRUE, ac
     }
   }
 }
+
 
 #' Broad-sense heritability of a pathogen trait
 #' @param epidemic a list of objects returned from simulateEpidemic
@@ -484,8 +674,7 @@ estimH2 <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin
     }
     if(nrow(gen) >0) {
       gen[, z:=calcValue(env, gene, e, GEValues)]
-      gen[, G:=mean(z), by=gene]
-      gen[, var(G)/var(z)]  
+      gen[, summary(lm(z~as.factor(gene)))$adj.r.squared]
     } else {
       NA
     }
@@ -514,9 +703,13 @@ newgennxNorm <- function(pe, sde, pg.init, N, eUniqForEachG=FALSE) {
 }
 
 sampleEvent <- function(rates, timeStep) {
+  # total rate at which an event occurs during this timeStep
   lambdas <- rowSums(rates)
-  probs0 <- exp(-lambdas*timeStep)
+  
+  # probabilities that no event has happened during the timeStep
+  probs0 <- exp(-lambdas*timeStep) 
  
+  # set intervals of propbabilities for no-event, sampling, dieing, transmitting and mutating to each other strain
   probs <- cbind(probs0, rates/lambdas*(1-probs0))
   for(i in 2:ncol(probs)) {
     probs[, i] <- probs[, i-1]+probs[, i]
