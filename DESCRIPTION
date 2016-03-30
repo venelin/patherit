@@ -14,3 +14,16 @@ Depends:
     adaptMCMC,
     coda
 RoxygenNote: 5.0.1
+Package: simulepidemictrait
+Type: Package
+Title: Simulation of Pathogen Trait Evolution During an Epidemic
+Version: 0.1
+Date: 2015-09-07
+Author: Venelin Mitov
+Maintainer: <venelin.mitov@bsse.ethz.ch>
+Description: This package provides functions to simulate the chain of transmission events emerging during
+  an epidemic outbreak together with the within host evolution of several quantitative trait loci in the pathgogen
+  genome associated with a pathogen trait. 
+License: GPL (>=2.0)
+Depends: ape, data.table
+KeepSource: TRUE
