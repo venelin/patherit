@@ -3,18 +3,19 @@
 \alias{estimH2}
 \title{Broad-sense heritability of a pathogen trait}
 \usage{
-estimH2(epidemic, GEValues, sampledOnly = TRUE, activeOnly = FALSE,
-  tMin = 0, tMax = Inf, lastN = Inf)
+estimH2(epidemic = NULL, data = NULL, GEValues = NULL,
+  sampledOnly = TRUE, activeOnly = FALSE, tMin = 0, tMax = Inf,
+  firstN = Inf, lastN = Inf)
 }
 \arguments{
 \item{epidemic}{a list of objects returned from simulateEpidemic}
 
-\item{GEValues}{genotype-environment trait values}
+\item{data}{NULL or a data.table such as the element gen in an epidemic list}
 
-\item{sampledOnly}{logical, indicating if only sampled individuals should be included in the heritability calculation}
+\item{GEValues}{genotype-environment trait values for calculating the z-values; if NULL it is assumed that the
+z-values are already in data, or epidemic$gen.}
 
-\item{tMin,tMax}{numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be
-the times of sampling for the individuals; otherwise, this would be the times of infection.}
+\item{sampledOnly,activeOnly,tMin,tMax,firstN,lastN}{parameters passed to extractPop}
 }
 \value{
 numeric indicating the estimated heritability for infected individuals in the population.

@@ -3,12 +3,14 @@
 \alias{decomposeTrait}
 \title{Decompose trait values according to the model z=G+I+E+epsilon}
 \usage{
-decomposeTrait(data, GEValues)
+decomposeTrait(data, GEValues, copy = TRUE)
 }
 \arguments{
 \item{data}{a data.table returned by extractPop}
 
 \item{GEValues}{a matrix of GEValues}
+
+\item{copy}{logical indicating whether a copy of the original data.table should be returned (TRUE by default)}
 }
 \description{
 Decompose trait values according to the model z=G+I+E+epsilon

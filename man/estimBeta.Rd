@@ -3,15 +3,17 @@
 \alias{estimBeta}
 \title{Regression slope of recipient on donor values in an epidemic}
 \usage{
-estimBeta(epidemic, GEValues, atInfection = FALSE, sampledOnly = TRUE,
-  activeOnly = FALSE, tMin = 0, tMax = Inf, lastN = Inf,
-  report = FALSE)
+estimBeta(epidemic = NULL, data = NULL, GEValues, sampledOnly = TRUE,
+  activeOnly = FALSE, tMin = 0, tMax = Inf, firstN = Inf, lastN = Inf,
+  atInfection = FALSE, report = FALSE, corr = FALSE)
 }
 \arguments{
 \item{sampledOnly}{logical, indicating if only sampled individuals should be included in the heritability calculation}
 
 \item{tMin,tMax}{numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be
 the times of sampling for the individuals; otherwise, this would be the times of infection.}
+
+\item{corr}{logical, should donor-recipient correlation be returned instead of regression slope}
 }
 \description{
 Regression slope of recipient on donor values in an epidemic
