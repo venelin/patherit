@@ -68,12 +68,9 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   countNames <- c('time', 'Total',
                   'N', 'X', 'Y', 'Z', 'nTips', 'D', 'meanActive', 'sdActive',
                   'qActive0%', 'qActive2.5%', 'qActive25%', 'qActive50%', 'qActive75%', 'qActive97.5%', 'qActive100%', 
-                  'H2A', 'H2bAtInfectionA', 'betaAtInfectionA',
-                  'H2S', 'H2bAtInfectionS', 'betaAtInfectionS', 
-                  'H2', 'H2bAtInfection', 'betaAtInfection', 
-                  'H2bA', 'betaA',
-                  'H2bS', 'betaS',
-                  'H2b', 'beta', 
+                  'R2adj.A', 'rA.A', 'b.AtInfectionA','b.A', 
+                  'R2adj.S', 'rA.S', 'b.AtInfectionS','b.S',
+                  'R2adj', 'rA', 'b.AtInfection', 'b', 
                   'nCouplesA', 'nCouplesS', 'nCouples')
   for(k in 1:nEnvs) {
     countNames <- c(countNames, paste0('Y', k, 1:nGtps))
@@ -137,13 +134,25 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
       cnt <- c(iter*timeStep, nrow(gen), 
                l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]), l$nTips, nrow(gen[alive==0]), 
                mean(l$zActive), sd(l$zActive), quantile(l$zActive, probs=c(0, .025, .25, .5, .75, .975, 1)), 
-               estimH2(epid, GEValues, FALSE, TRUE), estimH2b(epid, GEValues, TRUE, FALSE, TRUE), estimBeta(epid, GEValues, TRUE, FALSE, TRUE), 
-               estimH2(epid, GEValues, TRUE, FALSE), estimH2b(epid, GEValues, TRUE, TRUE, FALSE), estimBeta(epid, GEValues, TRUE, TRUE, FALSE), 
-               estimH2(epid, GEValues, FALSE, FALSE), estimH2b(epid, GEValues, TRUE, FALSE, FALSE), estimBeta(epid, GEValues, TRUE, FALSE, FALSE), 
-               estimH2b(epid, GEValues, FALSE, FALSE, TRUE), estimBeta(epid, GEValues, FALSE, FALSE, TRUE),
-               estimH2b(epid, GEValues, FALSE, TRUE, FALSE), estimBeta(epid, GEValues, FALSE, TRUE, FALSE),
-               estimH2b(epid, GEValues, FALSE, FALSE, FALSE), estimBeta(epid, GEValues, FALSE, FALSE, FALSE),
-               nrow(extractDRCouples(epid, FALSE, TRUE)), nrow(extractDRCouples(epid, TRUE, FALSE)), nrow(extractDRCouples(epid, FALSE, FALSE))
+               
+               R2adj(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=TRUE), 
+               rA(epidemic=epid, data=NULL, GEValues=GEValues, sampledOnly=FALSE, activeOnly=TRUE), 
+               b(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=TRUE, atInfection=TRUE), 
+               b(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=TRUE, atInfection=FALSE),
+               
+               R2adj(epidemic=epid, GEValues=GEValues, sampledOnly=TRUE, activeOnly=FALSE), 
+               rA(epidemic=epid, data=NULL, GEValues=GEValues, sampledOnly=TRUE, activeOnly=FALSE), 
+               b(epidemic=epid, GEValues=GEValues, sampledOnly=TRUE, activeOnly=FALSE, atInfection=TRUE), 
+               b(epidemic=epid, GEValues=GEValues, sampledOnly=TRUE, activeOnly=FALSE, atInfection=FALSE),
+               
+               R2adj(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=FALSE), 
+               rA(epidemic=epid, data=NULL, GEValues=GEValues, sampledOnly=FALSE, activeOnly=FALSE), 
+               b(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=FALSE, atInfection=TRUE), 
+               b(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=FALSE, atInfection=FALSE),
+               
+               nrow(extractDRCouples(epidemic=epid, sampledOnly=FALSE, activeOnly=TRUE)), 
+               nrow(extractDRCouples(epidemic=epid, sampledOnly=TRUE, activeOnly=FALSE)), 
+               nrow(extractDRCouples(epidemic=epid, sampledOnly=FALSE, activeOnly=FALSE))
                )
       
       for(k in 1:nEnvs) {
@@ -207,7 +216,7 @@ normReactMat <- function(genotypeXenv, GE) {
 }
 
 
-#' Transmission chain between sampled individuals in an epidemic
+#' Extract the transmission tree connecting sampled individuals in a simulated epidemic
 #' @param epidemic list returned by simulateEpidemic
 #' @param tips,idTips integer vectors (see details)
 #' @param collapse.singles logical indicating whether non-bifurcating internal nodes should be collapsed using the ape function collapse.singles(). Default: TRUE
@@ -219,7 +228,7 @@ normReactMat <- function(genotypeXenv, GE) {
 #' This is useful if, for example, one has searched all individuals who were sampled during 
 #' a specified time interval of the epidemic.
 #' @export
-makeTree <- function(epidemic, tips=NULL, idTips=NULL, collapse.singles=TRUE) {
+extractTree <- function(epidemic, tips=NULL, idTips=NULL, collapse.singles=TRUE) {
   gen <- copy(epidemic$gen)
   edge.length <- epidemic$edge.length
   
@@ -505,7 +514,7 @@ decomposeVar <- function(data) {
 #'    the times of sampling for the individuals; otherwise, this would be the times of infection. 
 #' @param corr logical, should donor-recipient correlation be returned instead of regression slope
 #' @export
-estimBeta <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
+b <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
                       firstN=Inf, lastN=Inf, atInfection=FALSE, report=FALSE, corr=FALSE) {
   if(is.null(epidemic)&is.null(data)) {
     warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')
@@ -560,7 +569,7 @@ estimBeta <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE, acti
 #' otherwise a list of statistics from the ANOVA calculation
 #' @return See report parameter
 #' @export
-estimH2aov <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf,
+rA <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf,
                        firstN=Inf, lastN=Inf, by=list('gene'), report=FALSE) {
   if(is.null(epidemic)&is.null(data)) {
     warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')
@@ -639,7 +648,7 @@ estimH2aov <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE
 #' @return numeric indicating the estimated heritability for infected individuals in the population. 
 #'  
 #' @export
-estimH2 <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
+R2adj <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
                     firstN=Inf, lastN=Inf) {
   if(is.null(epidemic)&is.null(data)) {
     warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')

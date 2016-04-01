@@ -5,7 +5,7 @@ NULL
 #' @param v Either a numeric vector containing the phenotypic values at the tips of tree or
 #' a named list containing named elements v - a numeric vector and tree - a phylo object. 
 #' @param tree a phylo object
-#' @param distgr character vector, see parameter distgr of the likVTreeOU function
+#' @param distgr character vector, see parameter distgr of the lik.poumm function
 #' @param parFixed a named numeric vector, indicating fixed values for some of the parameters
 #' alpha, theta, sigma and sigmae, by default, c().
 #' @param parMin, parMax two named numeric vectors indicating the boundaries of the search region. 
@@ -17,14 +17,12 @@ NULL
 #' if this parameter is set to 100, the resulting parameter alpha should be divided by 100 and the parameter 
 #' sigma should be divided by 10. 
 #' @param control list of parameters passed on to optim
-#' @param ... additional parameters passed to the likVTreeOU function
+#' @param ... additional parameters passed to the lik.poumm function
 #' 
-#' @return a list containing an element par and an element value as well as the parameters passed to the 
-#' call of mlOUTree
-#' 
+#' @return a list containing an element par and an element value as well as the parameters passed
 #' 
 #' @export
-mlOUTree <- function(v, tree, distgr=c('maxlik', 'normal'), parFixed=c(), 
+ml.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), parFixed=c(), 
                      parMin=c(alpha=0, theta=0, sigma=0, sigmae=0), 
                      parMax=c(alpha=100, theta=10, sigma=20, sigmae=10),
                      divideEdgesBy=1, control=list(), verbose=FALSE, ...) {
@@ -120,7 +118,7 @@ mlOUTree <- function(v, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
   }
   
   minusll <- memoriseMin(function(par, ...) {
-    value <- -do.call(likVTreeOU, 
+    value <- -do.call(lik.poumm, 
                       c(list(v, tree), as.list(parFixedNoAlpha), as.list(par), list(log=T, distgr=distgr), 
                         list(impl='R5', pruneInfo=pruneInfo), list(...)))
     if(is.na(value) | is.nan(value) | is.infinite(value)) {

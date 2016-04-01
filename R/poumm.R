@@ -1,4 +1,4 @@
-# Implementation of the POUMM method
+# Implementation of the POUMM likelihood and heritability estimators
 
 NULL
                        
@@ -175,7 +175,7 @@ likGETreeOU <- function(g, tree, alpha, theta, sigma,
 #' @param debug logical, if set to TRUE some debugging information is stored in a global 
 #'    list called .likVTreeOUDebug (currently implemented only for impl='R3')
 #' @export
-likVTreeOU <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
+lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
                        distgr=c('normal', 'maxlik'), 
                        mugr=theta, 
                        sigmagr=ifelse(alpha==0&sigma==0, 0, sigma/sqrt(2*alpha)),
@@ -458,11 +458,9 @@ likVTreeOU <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
               g1 <- v[edgeEnds]  # tip values
               etalphag1thetatheta <- etalpha[es]*(g1-theta)+theta
               
-              pif[edgeEnds, ]  <- 
-                c(fe2talphasigma2[es],
-                  -2 * etalphag1thetatheta * fe2talphasigma2[es],
-                  r0[es] + etalphag1thetatheta^2 * fe2talphasigma2[es]
-                )
+              pif[edgeEnds, 1] <- fe2talphasigma2[es]
+              pif[edgeEnds, 2] <- -2 * etalphag1thetatheta * fe2talphasigma2[es]
+              pif[edgeEnds, 3] <- r0[es] + etalphag1thetatheta^2 * fe2talphasigma2[es]
             } else {
               v1 <- v[edgeEnds]  # tip values
               
@@ -472,12 +470,12 @@ likVTreeOU <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
               
               gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
               
-              pif[edgeEnds, ] <- c(u/gutalphasigma2,
-                                   (etalpha[es]*(2*theta*u+w)-2*theta*u)/gutalphasigma2,
-                                   -0.5*log(gutalphasigma2) -
-                                     0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) + 
-                                     alpha*theta*(theta*u-etalpha[es]*(theta*u+w))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
-                                     talpha[es]+z)
+              pif[edgeEnds, 1] <- u / gutalphasigma2
+              pif[edgeEnds, 2] <- (etalpha[es]*(2*theta*u+w)-2*theta*u) / gutalphasigma2
+              pif[edgeEnds, 3] <- -0.5*log(gutalphasigma2) -
+                0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) +
+                alpha*theta*(theta*u-etalpha[es]*(theta*u+w)) /
+                ((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + talpha[es]+z
             }
           } else {
             # edges pointing to internal nodes, for which all children nodes have been visited
@@ -486,13 +484,13 @@ likVTreeOU <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
             z <- pif[edgeEnds, 3]
             
             gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
-            
-            pif[edgeEnds, ] <- c(u/gutalphasigma2,
-                                 (etalpha[es]*(2*theta*u+w)-2*theta*u)/gutalphasigma2,
-                                 -0.5*log(gutalphasigma2) -
-                                   0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) + 
-                                   alpha*theta*(theta*u-etalpha[es]*(theta*u+w))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
-                                   talpha[es]+z)
+
+            pif[edgeEnds, 1] <- u / gutalphasigma2
+            pif[edgeEnds, 2] <- (etalpha[es]*(2*theta*u+w)-2*theta*u) / gutalphasigma2
+            pif[edgeEnds, 3] <- -0.5*log(gutalphasigma2) -
+              0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) +
+              alpha*theta*(theta*u-etalpha[es]*(theta*u+w)) /
+              ((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + talpha[es]+z
           } 
           
           #update parent pifs
@@ -587,11 +585,11 @@ likVTreeOU <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
 
 #' Calculate alpha given heritability H2, sigma and sigmae
 #' @export
-calcAlpha <- function(H2, sigma, sigmae) {
+alpha.poumm <- function(H2, sigma, sigmae) {
   sigma^2*(1-H2)/(2*H2*sigmae^2)
 }
 
-#' Calculate Sigma given heritability at time, alpha and sigmae
+#' Calculate sigmaOU given heritability at time, alpha and sigmae
 #' @param H2 numeric, the heritability at time t
 #' @param alpha numeric, selection strength of the OU process
 #' @param sigmae numeric, environmental phenotypic deviation at the tips
@@ -599,7 +597,7 @@ calcAlpha <- function(H2, sigma, sigmae) {
 #' 
 #' 
 #' @export
-calcSigma <- function(H2, alpha, sigmae, t=Inf) {
+sigmaOU.poumm <- function(H2, alpha, sigmae, t=Inf) {
   if(H2>1 | H2<0 | alpha < 0 | sigmae < 0 | t < 0) {
     stop("H2(t) should be in [0, 1], alpha, sigmae and t should be non-negative.")
   }
@@ -623,41 +621,30 @@ calcSigma <- function(H2, alpha, sigmae, t=Inf) {
   }
 }
 
-#' Calculate Sigmag (i.e. standard dev. of stationary distr.) given H2 and
-#' sigmae
+#' Genotypic variance at time
+#' @param alpha,sigma numeric, parameters of the OU process acting on the genetic contributions 
+#' @param sigmae numeric, environmental standard deviation
+#' @param t time from the beginning of the process at which heritability should be calculated, i.e.
+#' epidemiologic time
 #' @export
-calcSigmag <- function(H2, sigmae) {
-  sqrt(H2*sigmae^2/(1-H2))
+sigmaG.poumm <- function(alpha, sigma, sigmae, t) {
+  lenoutput <- max(sapply(list(alpha, sigma, sigmae, t), length))
+  if(lenoutput>1) {
+    alpha <- rep(alpha, lenoutput/length(alpha))
+    sigma <- rep(sigma, lenoutput/length(sigma))
+    sigmae <- rep(sigmae, lenoutput/length(sigmae))
+    t <- rep(t, lenoutput/length(t))
+  }
+  ifelse(alpha>0, 0.5*(1-exp(-2*alpha*t))/alpha*sigma^2, t*sigma^2)  
 }
 
 #' Calculate sigmae given alpha, sigma, and H2.
 #' @details Uses the formula 
 #' H2=varStOU(alpha, sigma)/(varStOU(alpha, sigma)+sigmae^2)
 #' @export
-calcSigmae <- function(alpha, sigma, H2) {
+sigmae.poumm <- function(alpha, sigma, H2) {
   sigmaStOU2 <- varStOU(alpha, sigma)
   sqrt(sigmaStOU2/H2 - sigmaStOU2)
-}
-
-#' Long-term (equilibrium) Broad-sense heritability H2 given alpha, sigma and sigmae
-#' 
-#' @note This function calculates the heritability by assuming
-#' that all tips in the tree are sampled from the 
-#' equilibrium distribution.
-#' @export
-calcH2 <- function(alpha, sigma, sigmae) {
-  if(sigma==0) {
-    if(sigmae==0) {
-      NaN
-    } else {
-      # sigmae>0
-      0
-    }
-  } else if(alpha==0) {
-    1
-  } else {
-    sigma^2/(sigma^2+2*alpha*sigmae^2)  
-  }
 }
 
 #' Broad-sense heritability estimated from the empirical variance of
@@ -666,7 +653,7 @@ calcH2 <- function(alpha, sigma, sigmae) {
 #' @param sigmae numerical standard deviation of the environmental deviation
 #' @return numerical between 0 and 1 
 #' @export
-calcH2EmpSigmae <- function(v, sigmae, tree=NULL, tFrom=0, tTo=Inf) {
+H2e.poumm <- function(v, sigmae, tree=NULL, tFrom=0, tTo=Inf) {
   if(!is.null(tree)) {
     tipTimes <- nodeTimes(tree)[1:length(tree$tip.label)]
     v <- v[which(tipTimes>=tFrom & tipTimes<=tTo)]
@@ -682,7 +669,7 @@ calcH2EmpSigmae <- function(v, sigmae, tree=NULL, tFrom=0, tTo=Inf) {
 #' @param tm average time for within host evolution from getting infected until getting measured or 
 #' passing on the infection to another host
 #' @export
-calcH2AtTime <- function(alpha, sigma, sigmae, t, tm=0
+H2.poumm <- function(alpha, sigma, sigmae, t, tm=0
                          #, as=c('vector', 'mean', 'median')
                          ) {
   lenoutput <- max(sapply(list(alpha, sigma, sigmae, t, tm), length))
@@ -699,22 +686,7 @@ calcH2AtTime <- function(alpha, sigma, sigmae, t, tm=0
   ifelse(t>tm, (sigmag2-sigmagm2)/(sigmag2+sigmae^2), rep(0, length(t)))
 }
 
-#' Genotypic variance at time
-#' @param alpha,sigma numeric, parameters of the OU process acting on the genetic contributions 
-#' @param sigmae numeric, environmental standard deviation
-#' @param t time from the beginning of the process at which heritability should be calculated, i.e.
-#' epidemiologic time
-#' @export
-calcSigmagAtTime <- function(alpha, sigma, sigmae, t) {
-  lenoutput <- max(sapply(list(alpha, sigma, sigmae, t), length))
-  if(lenoutput>1) {
-    alpha <- rep(alpha, lenoutput/length(alpha))
-    sigma <- rep(sigma, lenoutput/length(sigma))
-    sigmae <- rep(sigmae, lenoutput/length(sigmae))
-    t <- rep(t, lenoutput/length(t))
-  }
-  ifelse(alpha>0, 0.5*(1-exp(-2*alpha*t))/alpha*sigma^2, t*sigma^2)  
-}
+
 
 #' Expected value of the Ornstein-Uhlenbeck process conditioned on initial value
 #' @param g0 numeric, initial value
@@ -724,7 +696,7 @@ calcSigmagAtTime <- function(alpha, sigma, sigmae, t) {
 #'     process.
 #' @param t time at which the expected value should be estimated
 #' @export
-calcMuAtTime <- function(g0, alpha, theta, sigma, t=Inf) {
+mu.poumm <- function(g0, alpha, theta, sigma, t=Inf) {
   if(t==Inf) {
     theta
   } else {
@@ -732,14 +704,6 @@ calcMuAtTime <- function(g0, alpha, theta, sigma, t=Inf) {
   }
 }
 
-
-#' Broad-sense heritability H2 for known genetic contributions, g, 
-#' and known environmental deviations, e, at the tips of the tree.
-#' @export
-calcH2emp <- function(tree, g, e) {
-  N <- length(tree$tip.label) 
-  var(g[1:N])/var(g[1:N] + e[1:N])
-}
 
 # with standard double precision this code is numerically unstable for small
 #

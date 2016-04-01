@@ -5,7 +5,9 @@ NULL
 #' Extract information for pruning a tree used as cache in poumm likelihood calculation
 #' 
 #' @param tree a phylo object
-#' @return a list to be passed to likVTreeOU with impl='R5'
+#' 
+#' @details This method should only be called if calculating poumm likelihood with impl='R5'.
+#' @return a list of objects
 #' 
 #' @export
 pruneTree <- function(tree) {

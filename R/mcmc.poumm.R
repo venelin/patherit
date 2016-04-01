@@ -110,7 +110,7 @@ analyseMCMCs <- function(chains, stat=function(x, ...) {x}, statName=NULL,
 #' 
 #' 
 #' @export
-mcmcOUTree <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1, 
+mcmc.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1, 
                        parToATSSe=function(par) {c(par[1], par[2], sqrt(par[3:4]))},
                        parInit=function(chainNo) {c(alpha=0, theta=0, sigma2=1, sigmae2=1)},
                        parPrior=function(par) {
@@ -185,52 +185,3 @@ mcmcOUTree <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
             silent=TRUE)
   list(chains=chains, analysis=an)
 }
-
-
-#' Construct a (log-)posterior function for parameters given a tree and phenotype values at the tips, assuming the PMM/OU model.
-#' @param p a list containing an element called tree of class phylo and a numeric vector called v of length the number of tips in the
-#' tree
-#' @param prior a function object calculating the prior (log-) density for given parameters
-#' @param parToATSSeL a function object converting the parameters par to a vector of at least 5 values, the first five of which should be
-#' corresponding to alpha, theta, sigma, sigmae, and lambda, to be passed to likVTreeOU
-#' @param addParam a function of p, returning a list of additional parameters to be passed to the prior and
-#' parToATSSeL functions, defaults to a funciton returning a list of a single element which is the input list p.
-#' @param controlLikVTreeOU list, additional parameters to pass to likVTreeOU apart from tree, v, alpha, sigma, sigmae, lambda and log
-#' @param log logical whether log-posterior should be calculated
-#' @param reportFreq numeric between 0 and 1 indicating how often report messages should be printed to the console, default
-#' is 0 meaning that no output to the console should be generated
-#' @return a function of one argument par
-#'
-#' @note The function addParam is called only once during the posterior creation, and its result is passed to the
-#' prior and parToATSSeL function every time.
-#' @export
-makePostVTreeOU <- function(p,
-                            prior=function(par, ...) {stop('You should define a prior function!')},
-                            parToATSSeL=function(par, ...) {par},
-                            addParam=function(p) {list(p=p)},
-                            controlLikVTreeOU=NULL, log=T, reportFreq=0, ...) {
-  additional <- addParam(p)
-  function(par) {
-    pr <- do.call(prior, c(list(par=par), additional))
-
-    if(is.infinite(pr)) {
-      if(pr>0) {
-        cat('Infinite prior for par=', toString(par), '\n', sep='')
-      }
-      pr
-    } else {
-      atssel <- do.call(parToATSSeL, c(list(par=par), additional))
-      lik <- do.call(likVTreeOU,
-                     c(list(v=p$v, tree=p$tree, alpha=atssel[1], theta=atssel[2], sigma=atssel[3], sigmae=atssel[4],
-                            lambda=atssel[5], log=log), controlLikVTreeOU))
-
-      post <- if(log) lik+pr else lik*pr
-
-      if(runif(1)<reportFreq) {
-        print(c(atssel, c(lik=lik, pr=pr, post=post)))
-      }
-      post
-    }
-  }
-}
-
