@@ -705,7 +705,7 @@ mu.poumm <- function(g0, alpha, theta, sigma, t=Inf) {
 }
 
 
-# with standard double precision this code is numerically unstable for small
+# with standard double precision this code is numerically unstable 
 #
 paramsForkOUR1 <- function(tree, x, e, alpha, theta, sigma, sigmae) {
   if(length(edgesFrom(tree, tree$edge[e, 2]))==0) {

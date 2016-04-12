@@ -51,7 +51,12 @@ analyseMCMCs <- function(chains, stat=function(x, ...) {x}, statName=NULL,
   mcs <- as.mcmc.list(lapply(mcmcs, function(mc) {
     winmcmc <- window(mc$mcmc, start=start, end=end, thin=thin)
     data <- matrix(apply(winmcmc, 1, stat, ...), nrow=nrow(winmcmc), byrow=T)
-    mcmc(data, start=start(winmcmc), end=end(winmcmc), thin=thin(winmcmc))
+    # print(dim(data))
+    # print(data[1:10,])
+    # print(start(winmcmc))
+    # print(end(winmcmc))
+    # print(thin(winmcmc))
+    coda::mcmc(data, start=start(winmcmc), end=end(winmcmc), thin=thin(winmcmc))
   }))
   names(mcs) <- names(chains)
   mcs.mat <- as.matrix(mcs)
@@ -85,7 +90,7 @@ analyseMCMCs <- function(chains, stat=function(x, ...) {x}, statName=NULL,
 #' @param v Either a numeric vector containing the phenotypic values at the tips of tree or
 #' a named list containing named elements v - a numeric vector and tree - a phylo object. 
 #' @param tree a phylo object
-#' @param distgr character vector, see parameter distgr of the likVTreeOU function
+#' @param distgr character vector, see parameter distgr of the lik.poumm function
 #' @param divideEdgesBy numeric, by which all branch lengths in the tree 
 #' are to be divided prior to likelihood calculation. Only the branch lengths in the tree are changed 
 #' and appropriate rescaling of the OU parameters alpha and sigma is not made. For example, 
@@ -163,7 +168,7 @@ mcmc.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
       } else {
         atsse <- parToATSSe(par)
         names(atsse) <- NULL
-        lik <- likVTreeOU(v, tree, alpha=atsse[1], theta=atsse[2], sigma=atsse[3], sigmae=atsse[4], 
+        lik <- lik.poumm(v, tree, alpha=atsse[1], theta=atsse[2], sigma=atsse[3], sigmae=atsse[4], 
                           distgr=distgr[1], log=T, impl='R5', pruneInfo=pruneInfo, ...)
       }
       pr+lik  
