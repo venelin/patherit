@@ -175,7 +175,7 @@ likGETreeOU <- function(g, tree, alpha, theta, sigma,
 #' @param debug logical, if set to TRUE some debugging information is stored in a global 
 #'    list called .likVTreeOUDebug (currently implemented only for impl='R3')
 #' @export
-lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, lambda=1,
+lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, 
                        distgr=c('normal', 'maxlik'), 
                        mugr=theta, 
                        sigmagr=ifelse(alpha==0&sigma==0, 0, sigma/sqrt(2*alpha)),
@@ -193,7 +193,7 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, lambda=1,
     stop('All branch lengths in tree should be positive!')
   }
   if(any(is.na(c(alpha, theta, sigma, sigmae))) | 
-    any(is.nan(c(alpha, theta, sigma, sigmae, lambda)))) {
+    any(is.nan(c(alpha, theta, sigma, sigmae)))) {
     warning('Some parameters are NA or NaN')
     ifelse(log, -Inf, 0)
   } 
@@ -234,22 +234,6 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, lambda=1,
         M <- length(unique(as.vector(tree$edge)))  # number of all nodes 
         endingAt <- order(rbind(tree$edge, c(0, N+1))[, 2])
         
-        if(lambda != 1) {
-          # transform branch lengths
-          times <- nodeTimes(tree)
-          tree$edge.length <- tree$edge.length*lambda
-          timeslambda <- nodeTimes(tree)
-          tree$edge.length[endingAt[1:N]] <- 
-            tree$edge.length[endingAt[1:N]] + times[1:N] - timeslambda[1:N]
-          if(lambda==0) {
-            #star topology
-            tree$edge.length <- tree$edge.length[endingAt[1:N]]
-            tree$edge <- tree$edge[endingAt[1:N], ]
-            tree$edge[, 1] <- N+1
-            M <- N+1
-            endingAt <- order(rbind(tree$edge, c(0, N+1))[, 2])
-          }
-        }
         
         edge <- tree$edge
         t <- tree$edge.length
@@ -383,10 +367,6 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, lambda=1,
         if(is.null(pruneInfo)) {
           warning('You should supply pruneInfo with impl=="R5". see ?pruneInfo')
           pruneInfo <- pruneTree(tree)
-        }
-        
-        if(lambda != 1) {
-          stop('impl="R5" does not support lambda different than 1. Use impl="R4" instead.')
         }
         
         edge <- tree$edge
@@ -551,7 +531,6 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, lambda=1,
     }  
     if(debug) {
       debugdata <- data.table(alpha=list(alpha), theta=list(theta), sigma=list(sigma), sigmae=list(sigmae),
-                              lambda=list(lambda), 
                               alphasigma2=list(alphasigma2), theta2=list(theta2), sigma2=list(sigma2),
                               sigmae2=list(sigmae2), logsigma=list(logsigma), logsigmae=list(logsigmae), 
                               t=list(t),
