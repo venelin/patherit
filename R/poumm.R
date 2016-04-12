@@ -144,7 +144,7 @@ likGETreeOU <- function(g, tree, alpha, theta, sigma,
 #' theta and unit time variance sigma^2.
 #'
 #' @param tree an object of class phylo
-#' @param v A numeric vector of size length(tree$tip.label) representing the trait
+#' @param z A numeric vector of size length(tree$tip.label) representing the trait
 #'     values at the tip-nodes.
 #' @param alpha the strength of the selection
 #' @param theta long term mean value of the OU process
@@ -175,7 +175,7 @@ likGETreeOU <- function(g, tree, alpha, theta, sigma,
 #' @param debug logical, if set to TRUE some debugging information is stored in a global 
 #'    list called .likVTreeOUDebug (currently implemented only for impl='R3')
 #' @export
-lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
+lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, lambda=1,
                        distgr=c('normal', 'maxlik'), 
                        mugr=theta, 
                        sigmagr=ifelse(alpha==0&sigma==0, 0, sigma/sqrt(2*alpha)),
@@ -187,7 +187,7 @@ lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
   sigmaeorig <- sigmae
   mugrorig <- mugr
   sigmagrorig <- sigmagr
-  vorig <- v
+  vorig <- z
   
   if(any(tree$edge.length<=0)) {
     stop('All branch lengths in tree should be positive!')
@@ -226,7 +226,7 @@ lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
         if(is.double(sigmaeorig)) sigmae <- mpfr(sigmaeorig, precbits*2^(usempfr-2))
         if(is.double(mugr)) mugr <- mpfr(mugr, precbits*2^(usempfr-2))
         if(is.double(sigmagr)) sigmagr <- mpfr(sigmagr, precbits*2^(usempfr-2))
-        if(is.double(v)) v <- mpfr(v, precbits*2^(usempfr-2))
+        if(is.double(z)) z <- mpfr(z, precbits*2^(usempfr-2))
       }
       
       if(impl[1] == 'R4') {
@@ -318,7 +318,7 @@ lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
             # all es pointing to tips
             if(sigmae==0) {
               # no environmental deviation
-              g1 <- v[edgeEnds]  # tip values
+              g1 <- z[edgeEnds]  # tip values
               etalphag1thetatheta <- etalpha[es]*(g1-theta)+theta
               
               pif[edgeEnds, ]  <- 
@@ -327,35 +327,35 @@ lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
                   r0[es] + etalphag1thetatheta^2 * fe2talphasigma2[es]
                 )
             } else {
-              v1 <- v[edgeEnds]  # tip values
+              v1 <- z[edgeEnds]  # tip values
               
               u <- -0.5/sigmae2
-              w <- v1/sigmae2
-              z <- -0.5*loge2 - 0.5*logpi  - v1^2/(2*sigmae2) - logsigmae 
+              v <- v1/sigmae2
+              w <- -0.5*loge2 - 0.5*logpi  - v1^2/(2*sigmae2) - logsigmae 
               
               gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
               
               pif[edgeEnds, ] <- c(u/gutalphasigma2,
-                                      (etalpha[es]*(2*theta*u+w)-2*theta*u)/gutalphasigma2,
+                                      (etalpha[es]*(2*theta*u+v)-2*theta*u)/gutalphasigma2,
                                       -0.5*log(gutalphasigma2) -
-                                        0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) + 
-                                        alpha*theta*(theta*u-etalpha[es]*(theta*u+w))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
-                                        talpha[es]+z)
+                                        0.25*sigma2*v^2/(fe2talpha[es]-alpha + sigma2*u) + 
+                                        alpha*theta*(theta*u-etalpha[es]*(theta*u+v))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
+                                        talpha[es]+w)
             }
           } else {
             # edges pointing to internal nodes, for which all children nodes have been visited
             u <- pif[edgeEnds, 1]
-            w <- pif[edgeEnds, 2]
-            z <- pif[edgeEnds, 3]
+            v <- pif[edgeEnds, 2]
+            w <- pif[edgeEnds, 3]
             
             gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
             
             pif[edgeEnds, ] <- c(u/gutalphasigma2,
-                                    (etalpha[es]*(2*theta*u+w)-2*theta*u)/gutalphasigma2,
+                                    (etalpha[es]*(2*theta*u+v)-2*theta*u)/gutalphasigma2,
                                     -0.5*log(gutalphasigma2) -
-                                      0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) + 
-                                      alpha*theta*(theta*u-etalpha[es]*(theta*u+w))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
-                                      talpha[es]+z)
+                                      0.25*sigma2*v^2/(fe2talpha[es]-alpha + sigma2*u) + 
+                                      alpha*theta*(theta*u-etalpha[es]*(theta*u+v))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
+                                      talpha[es]+w)
           } 
 
           #update parent pifs
@@ -455,42 +455,42 @@ lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
             # all es pointing to tips
             if(sigmae==0) {
               # no environmental deviation
-              g1 <- v[edgeEnds]  # tip values
+              g1 <- z[edgeEnds]  # tip values
               etalphag1thetatheta <- etalpha[es]*(g1-theta)+theta
               
               pif[edgeEnds, 1] <- fe2talphasigma2[es]
               pif[edgeEnds, 2] <- -2 * etalphag1thetatheta * fe2talphasigma2[es]
               pif[edgeEnds, 3] <- r0[es] + etalphag1thetatheta^2 * fe2talphasigma2[es]
             } else {
-              v1 <- v[edgeEnds]  # tip values
+              v1 <- z[edgeEnds]  # tip values
               
               u <- -0.5/sigmae2
-              w <- v1/sigmae2
-              z <- -0.5*loge2 - 0.5*logpi  - v1^2/(2*sigmae2) - logsigmae 
+              v <- v1/sigmae2
+              w <- -0.5*loge2 - 0.5*logpi  - v1^2/(2*sigmae2) - logsigmae 
               
               gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
               
               pif[edgeEnds, 1] <- u / gutalphasigma2
-              pif[edgeEnds, 2] <- (etalpha[es]*(2*theta*u+w)-2*theta*u) / gutalphasigma2
+              pif[edgeEnds, 2] <- (etalpha[es]*(2*theta*u+v)-2*theta*u) / gutalphasigma2
               pif[edgeEnds, 3] <- -0.5*log(gutalphasigma2) -
-                0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) +
-                alpha*theta*(theta*u-etalpha[es]*(theta*u+w)) /
-                ((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + talpha[es]+z
+                0.25*sigma2*v^2/(fe2talpha[es]-alpha + sigma2*u) +
+                alpha*theta*(theta*u-etalpha[es]*(theta*u+v)) /
+                ((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + talpha[es]+w
             }
           } else {
             # edges pointing to internal nodes, for which all children nodes have been visited
             u <- pif[edgeEnds, 1]
-            w <- pif[edgeEnds, 2]
-            z <- pif[edgeEnds, 3]
+            v <- pif[edgeEnds, 2]
+            w <- pif[edgeEnds, 3]
             
             gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
 
             pif[edgeEnds, 1] <- u / gutalphasigma2
-            pif[edgeEnds, 2] <- (etalpha[es]*(2*theta*u+w)-2*theta*u) / gutalphasigma2
+            pif[edgeEnds, 2] <- (etalpha[es]*(2*theta*u+v)-2*theta*u) / gutalphasigma2
             pif[edgeEnds, 3] <- -0.5*log(gutalphasigma2) -
-              0.25*sigma2*w^2/(fe2talpha[es]-alpha + sigma2*u) +
-              alpha*theta*(theta*u-etalpha[es]*(theta*u+w)) /
-              ((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + talpha[es]+z
+              0.25*sigma2*v^2/(fe2talpha[es]-alpha + sigma2*u) +
+              alpha*theta*(theta*u-etalpha[es]*(theta*u+v)) /
+              ((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + talpha[es]+w
           } 
           
           #update parent pifs
@@ -513,15 +513,15 @@ lik.poumm <- function(v, tree, alpha, theta, sigma, sigmae=0, lambda=1,
         done <- T
       } else if(impl[1] == 'R1') {
         esubs <- edgesFrom(tree, length(tree$tip.label)+1)
-        abc <- paramsForkOUR1(tree, v, esubs[1], alpha, theta, sigma, sigmae)
+        abc <- paramsForkOUR1(tree, z, esubs[1], alpha, theta, sigma, sigmae)
         for(es in esubs[-1]) 
-          abc <- abc + paramsForkOUR1(tree, v, es, alpha, theta, sigma, sigmae)
+          abc <- abc + paramsForkOUR1(tree, z, es, alpha, theta, sigma, sigmae)
         done <- T
       } else if(impl[1] == 'R2') {
         esubs <- edgesFrom(tree, length(tree$tip.label)+1)
-        abc <- paramsForkOUR2(tree, v, esubs[1], alpha, theta, sigma, sigmae)
+        abc <- paramsForkOUR2(tree, z, esubs[1], alpha, theta, sigma, sigmae)
         for(es in esubs[-1]) 
-          abc <- abc + paramsForkOUR2(tree, v, es, alpha, theta, sigma, sigmae)      
+          abc <- abc + paramsForkOUR2(tree, z, es, alpha, theta, sigma, sigmae)      
         done <- T
       } 
     }
@@ -649,16 +649,16 @@ sigmae.poumm <- function(alpha, sigma, H2) {
 
 #' Broad-sense heritability estimated from the empirical variance of
 #' the observed phenotypes and sigmae
-#' @param v numerical vector of observed phenotypes
+#' @param z numerical vector of observed phenotypes
 #' @param sigmae numerical standard deviation of the environmental deviation
 #' @return numerical between 0 and 1 
 #' @export
-H2e.poumm <- function(v, sigmae, tree=NULL, tFrom=0, tTo=Inf) {
+H2e.poumm <- function(z, sigmae, tree=NULL, tFrom=0, tTo=Inf) {
   if(!is.null(tree)) {
     tipTimes <- nodeTimes(tree)[1:length(tree$tip.label)]
-    v <- v[which(tipTimes>=tFrom & tipTimes<=tTo)]
+    z <- z[which(tipTimes>=tFrom & tipTimes<=tTo)]
   }
-  1-(sigmae^2/var(v))
+  1-(sigmae^2/var(z))
 }
 
 #' Broad-sense heritability estimated at time t
@@ -844,7 +844,7 @@ paramsForkOUR2 <- function(tree, x, e, alpha, theta, sigma, sigmae) {
 paramsForkForkCondOUR <- function(i, j, k, 
                                    m, n, o, p, q, r) {
   # exp(i1*g3^2+j1*g3+k1)*exp(i2*g3^2+j2*g3+k2)*exp(mg3^2+ng3+og4^2+pg4+qg3g4+r)
-  #  = exp(x*g3^2 + y*g3 + o*g4^2 + p*g4 + q*g3g4 + z)
+  #  = exp(x*g3^2 + y*g3 + o*g4^2 + p*g4 + q*g3g4 + w)
   res <- c(i+m, j+n, o, p, q, k+r)
 #   cat('paramsForkForkCondOUR: ')
 #   if(class(m)=='mpfr') {
@@ -857,7 +857,7 @@ paramsForkForkCondOUR <- function(i, j, k,
 
 paramsIntegForkOUR <- function(a, b, c, d, e, f) {
   # Integrate[exp(ag3^2+bg3+cg4^2+dg4+eg3g4+f), (g3, -Inf, Inf)]
-  #    = x*g4^2 + y*g4 + z
+  #    = x*g4^2 + y*g4 + w
   if(any(is.na(a) | a >= 0)) {
     warning(paste("paramsIntegForkOUR: Definite integral is not converging to a finite number, argument a should be negative, but was", a))
     c(NA, NA, NA)    
