@@ -162,24 +162,21 @@ likGETreeOU <- function(g, tree, alpha, theta, sigma,
 #' @param sigmagr see distgr
 #' @param log Logical indicating whether log-likelihood should be returned instead
 #'    of likelihood, default is TRUE.
-#' @param impl Character indicating which implementation of the method should 
-#' be used. One of  'R1', 'R2', 'R4'. Defaults to 'R4'. 
-#' @param pruneInfo list returned by prune(tree) to be passed when impl='R5'. 
+#' @param pruneInfo list returned by prune(tree) to be passed in explicit calls to lik.poumm. 
 #' @param usempfr,maxmpfr integer indicating if and how mpfr should be used for small parameter values 
 #'    (any(c(alpha, sigma, sigmae) < 0.01)). Using the mpfr package can be forced by specifying an 
 #'    integer greater or equal to 2. Setting usempfr=0 disables high precision likelihood calculation.
-#'    Requires the Rmpfr package. Note that when using mpfr, the time for one likelihood calculation can increase
-#'    substantially. 
-#'    with the use of mpfr. 
+#'    Requires the Rmpfr package. Note that when using mpfr, the time for one likelihood calculation can
+#'    increase more than 100-fold. 
 #' @param precbits integer specifying precision bits for mpfr. Default is 512.
 #' @param debug logical, if set to TRUE some debugging information is stored in a global 
-#'    list called .likVTreeOUDebug (currently implemented only for impl='R3')
+#'    list called .likVTreeOUDebug
 #' @export
 lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0, 
                        distgr=c('normal', 'maxlik'), 
                        mugr=theta, 
                        sigmagr=ifelse(alpha==0&sigma==0, 0, sigma/sqrt(2*alpha)),
-                       log=T, impl=c('R4', 'R2', 'R1'), pruneInfo=NULL,
+                       log=T, pruneInfo=NULL,
                        usempfr=1, maxmpfr=2, precbits=512, debug=F) {
   alphaorig <- alpha
   thetaorig <- theta
@@ -217,7 +214,7 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
     }
      
     done <- F
-    # this loop is global for all implementations and only governs the use of mpfr
+    # this loop governs the use of mpfr
     while(!done & usempfr <= maxmpfr) { 
       if(availRmpfr & usempfr >= 2) {
         if(is.double(alphaorig)) alpha <- mpfr(alphaorig, precbits*2^(usempfr-2))
@@ -229,143 +226,10 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
         if(is.double(z)) z <- mpfr(z, precbits*2^(usempfr-2))
       }
       
-      if(impl[1] == 'R4') {
-        N <- length(tree$tip.label)                # number of tips
-        M <- length(unique(as.vector(tree$edge)))  # number of all nodes 
-        endingAt <- order(rbind(tree$edge, c(0, N+1))[, 2])
-        
-        
-        edge <- tree$edge
-        t <- tree$edge.length
-        
-        alphasigma2 <- alpha/sigma/sigma
-        theta2 <- theta^2
-        sigma2 <- sigma^2
-        sigmae2 <- sigmae^2
-        logsigma <- log(sigma)
-        logsigmae <- log(sigmae)
-        
-        talpha <- t*alpha
-        etalpha <- exp(talpha)
-        if(alpha != 0) {
-          fetalpha <- alpha/(1 - etalpha)
-        } else {
-          fetalpha <- -1/t
-        }
-        
-        e2talpha <- etalpha*etalpha
-        limitfe2talpha <- -0.5/t
-        if(alpha != 0) {
-          fe2talpha <- alpha/(1 - e2talpha)
-        } else {
-          fe2talpha <- limitfe2talpha
-        }
-        
-        if(availRmpfr & usempfr & usempfr < maxmpfr) {
-          if(any(fe2talpha >= 0) | any(fe2talpha < limitfe2talpha)) {
-            usempfr <- usempfr + 1
-            next 
-          }
-        }
-        
-        log_fe2talpha <- log(-fe2talpha)
 
-        fe2talphasigma2 <- fe2talpha/sigma2
-        
-        # for sigmae=0
-        r0 <- talpha + 0.5*log_fe2talpha - 0.5*logpi - logsigma
-        
-        nonVisitedChildren <- rep(0, M)
-        ee1 <- edge[, 1]
-        while(length(ee1)) {
-          matchp <- match((N+1):M, ee1)
-          matchp <- matchp[!is.na(matchp)]
-          nonVisitedChildren[ee1[matchp]] <- nonVisitedChildren[ee1[matchp]] + 1
-          ee1 <- ee1[-matchp]
-        }
-        
-        # matrix for paramsIntegForks one pif for every node
-        # the following code creates a matrix for the class of alpha,
-        # i.e. could be mpfr as well as double
-        pif <- rep(alpha*0, M*3)
-        dim(pif) <- c(M, 3)
-        
-        # start from the edges leading to tips
-        nodes <- 1:N
-        
-        while(nodes[1] != N+1) {
-          es <- endingAt[nodes]
-          nodes <- c()
-          edgeEnds <- edge[es, 2]
-          
-          if(edge[es[1], 2] <= N) {
-            # all es pointing to tips
-            if(sigmae==0) {
-              # no environmental deviation
-              g1 <- z[edgeEnds]  # tip values
-              etalphag1thetatheta <- etalpha[es]*(g1-theta)+theta
-              
-              pif[edgeEnds, ]  <- 
-                c(fe2talphasigma2[es],
-                  -2 * etalphag1thetatheta * fe2talphasigma2[es],
-                  r0[es] + etalphag1thetatheta^2 * fe2talphasigma2[es]
-                )
-            } else {
-              v1 <- z[edgeEnds]  # tip values
-              
-              u <- -0.5/sigmae2
-              v <- v1/sigmae2
-              w <- -0.5*loge2 - 0.5*logpi  - v1^2/(2*sigmae2) - logsigmae 
-              
-              gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
-              
-              pif[edgeEnds, ] <- c(u/gutalphasigma2,
-                                      (etalpha[es]*(2*theta*u+v)-2*theta*u)/gutalphasigma2,
-                                      -0.5*log(gutalphasigma2) -
-                                        0.25*sigma2*v^2/(fe2talpha[es]-alpha + sigma2*u) + 
-                                        alpha*theta*(theta*u-etalpha[es]*(theta*u+v))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
-                                        talpha[es]+w)
-            }
-          } else {
-            # edges pointing to internal nodes, for which all children nodes have been visited
-            u <- pif[edgeEnds, 1]
-            v <- pif[edgeEnds, 2]
-            w <- pif[edgeEnds, 3]
-            
-            gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
-            
-            pif[edgeEnds, ] <- c(u/gutalphasigma2,
-                                    (etalpha[es]*(2*theta*u+v)-2*theta*u)/gutalphasigma2,
-                                    -0.5*log(gutalphasigma2) -
-                                      0.25*sigma2*v^2/(fe2talpha[es]-alpha + sigma2*u) + 
-                                      alpha*theta*(theta*u-etalpha[es]*(theta*u+v))/((1+etalpha[es])*(sigma2*u-alpha)+fetalpha[es]) + 
-                                      talpha[es]+w)
-          } 
-
-          #update parent pifs
-          while(length(es)>0) {
-            un <- match(unique(edge[es, 1]), edge[es, 1])
-            pif[edge[es[un], 1], ] <- pif[edge[es[un], 1], ] + pif[edge[es[un], 2], ]
-            nonVisitedChildren[edge[es[un], 1]] <- nonVisitedChildren[edge[es[un], 1]] - 1
-            nodes <- c(nodes, edge[es[un][nonVisitedChildren[edge[es[un], 1]] == 0], 1])
-            es <- es[-un]
-          }
-        }
-            
-        # at the root: P[Vtips|tree, g_root, alpha, theta, sigma, sigmae] =
-        #                  abc[1]*g_root^2 + abc[2]*g_root + abc[3]
-        abc <- pif[N+1, ]
-
-        if(availRmpfr & usempfr & (any(is.nan(abc)) | abc[1]==0 | is.infinite(abc[3]))) {
-          usempfr <- usempfr + 1
-          next 
-        }
-        done <- T
-      } else if(impl[1]=='R5') {
         N <- length(tree$tip.label)                # number of tips
         
         if(is.null(pruneInfo)) {
-          warning('You should supply pruneInfo with impl=="R5". see ?pruneInfo')
           pruneInfo <- pruneTree(tree)
         }
         
@@ -491,19 +355,6 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
           next 
         }
         done <- T
-      } else if(impl[1] == 'R1') {
-        esubs <- edgesFrom(tree, length(tree$tip.label)+1)
-        abc <- paramsForkOUR1(tree, z, esubs[1], alpha, theta, sigma, sigmae)
-        for(es in esubs[-1]) 
-          abc <- abc + paramsForkOUR1(tree, z, es, alpha, theta, sigma, sigmae)
-        done <- T
-      } else if(impl[1] == 'R2') {
-        esubs <- edgesFrom(tree, length(tree$tip.label)+1)
-        abc <- paramsForkOUR2(tree, z, esubs[1], alpha, theta, sigma, sigmae)
-        for(es in esubs[-1]) 
-          abc <- abc + paramsForkOUR2(tree, z, es, alpha, theta, sigma, sigmae)      
-        done <- T
-      } 
     }
     
     if(!is.character(distgr <- distgr[1])) {
@@ -541,7 +392,7 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
                               def=list(c(-0.5/sigmagr^2, 
                                          mugr/sigmagr^2, -0.5*mugr^2/sigmagr^2-log(sigmagr)-0.5*(loge2+logpi))),
                               loglik=list(loglik), grmax=list(-0.5*abc[2]/abc[1]), 
-                              availRmpfr=list(availRmpfr), impl=list(impl[1]), usempfr=list(usempfr), precbits=list(precbits))
+                              availRmpfr=list(availRmpfr), usempfr=list(usempfr), precbits=list(precbits))
       if(!exists('.likVTreeOUDebug')) {
         .likVTreeOUDebug <<- debugdata
       } else {
@@ -683,172 +534,3 @@ mu.poumm <- function(g0, alpha, theta, sigma, t=Inf) {
   }
 }
 
-
-# with standard double precision this code is numerically unstable 
-#
-paramsForkOUR1 <- function(tree, x, e, alpha, theta, sigma, sigmae) {
-  if(length(edgesFrom(tree, tree$edge[e, 2]))==0) {
-    # not a true fork because the edge e is pointing to a tip. 
-    # the probability is a function exp(ig3^2+jg3+k)
-    t1 <- tree$edge.length[[e]]
-    if(sigmae==0) {
-      # no environmental deviation
-      g1 <- x[[tree$edge[e, 2]]]  # tip value
-      
-      c(-(alpha/((-1 + exp(2*t1*alpha))*sigma^2)), 
-           (2*(exp(t1*alpha)*(g1 - theta) + theta)*alpha)/
-             ((-1 + exp(2*t1*alpha))*sigma^2),
-           log(sqrt(alpha/(pi*(1 - exp(-2*t1*alpha))*sigma^2))) - 
-             ((exp(t1*alpha)*(g1 - theta) + theta)^2*alpha)/
-             ((-1 + exp(2*t1*alpha))*sigma^2)
-      )
-    } else {
-      v1 <- x[[tree$edge[e, 2]]]  # tip value
-      # integrate over g1
-      # params for P(v1|g1,g3) = exp(mg1^2+ng1+og3^2+pg3+qg1g3+r)
-      m <- -(alpha/((1 - exp(-2*alpha*t1))*sigma^2)) - 1/(2*sigmae^2)
-      n <- (2*alpha*exp(alpha*t1)*theta)/((1 + exp(alpha*t1))*sigma^2) + 
-        v1/sigmae^2
-      o <- -alpha/((-1 + exp(2*alpha*t1))*sigma^2)
-      p <- -(2*alpha*theta)/((1 + exp(alpha*t1))*sigma^2)
-      q <- (2*alpha*exp(alpha*t1))/((-1 + exp(2*alpha*t1))*sigma^2)
-      r <- -(alpha*(-1 + exp(alpha*t1))*theta^2)/((1 + exp(alpha*t1))*sigma^2) -
-        v1^2/(2*sigmae^2) - log(pi) - log(sigma) - log(sigmae) -
-        log(sqrt(2*(1 - exp(-2*alpha*t1))/alpha))
-      
-      # print(paste('TIP: t1=', t1))
-      paramsIntegForkOUR(m, n, o, p, q, r)
-    }
-  } else {
-    esubs <- edgesFrom(tree, tree$edge[e, 2])
-    # print('PSUBS:')
-    
-    abc <- paramsForkOUR1(tree, x, esubs[1], alpha, theta, sigma, sigmae)
-    for(es in esubs[-1]) 
-      abc <- abc + paramsForkOUR1(tree, x, es, alpha, theta, sigma, sigmae)
-    
-    
-    #abc <- c(paramsForkOUR1(tree, x, esubs[1], alpha, theta, sigma, sigmae),
-    #           paramsForkOUR1(tree, x, esubs[2], alpha, theta, sigma, sigmae))
-    
-    t3 <- tree$edge.length[[e]]
-    # params for fCondOU(g3|g4) = exp(mg3^2+ng3+og4^2+pg4+qg3g4+r)
-    m <- (-(alpha/((1 - exp(-2*t3*alpha))*sigma^2)))
-    n <- ((2*exp(t3*alpha)*alpha*theta)/((1 + exp(t3*alpha))*sigma^2))
-    o <- (-(alpha/((-1 + exp(2*t3*alpha))*sigma^2)))
-    p <- ((-2*alpha*theta)/((1 + exp(t3*alpha))*sigma^2))
-    q <- ((2*exp(t3*alpha)*alpha)/((-1 + exp(2*t3*alpha))*sigma^2))
-    r <- log(sqrt(alpha/(pi*(1 - exp(-2*t3*alpha))*sigma^2))) +
-      ((1 - exp(t3*alpha))*alpha*theta^2)/((1 + exp(t3*alpha))*sigma^2)
-
-    # print(paste('PFFC: t3=', t3))
-    pffc <- paramsForkForkCondOUR(abc[1], abc[2], abc[3], 
-                                   m, n, o, p, q, r)
-    paramsIntegForkOUR(pffc[1], pffc[2], pffc[3], pffc[4], pffc[5], pffc[6])
-  }
-}
-
-paramsForkOUR2 <- function(tree, x, e, alpha, theta, sigma, sigmae) {
-  sigma2 <- sigma*sigma
-  alphasigma2 <- alpha/sigma/sigma
-  sigmae2 <- sigmae*sigmae
-  
-  if(length(edgesFrom(tree, tree$edge[e, 2]))==0) {
-    # not a true fork because the edge e is pointing to a tip. 
-    # the probability is a function exp(ig3^2+jg3+k)
-    t1 <- tree$edge.length[[e]]
-    et1alpha <- exp(t1*alpha)
-    e2t1alpha <- exp(2*t1*alpha)
-    
-    if(sigmae==0) {
-      # no environmental deviation
-      g1 <- x[[tree$edge[e, 2]]]  # tip value
-      
-      c(alphasigma2 / (1-e2t1alpha), 
-        2*(et1alpha*(g1-theta) + theta)/(e2t1alpha/alpha - 1/alpha)/sigma2,
-        0.5*log(alphasigma2/(pi*(1 - 1/e2t1alpha))) - 
-          (et1alpha*(g1-theta) + theta)^2/(e2t1alpha/alpha - 1/alpha)/sigma2
-      )
-    } else {
-      v1 <- x[[tree$edge[e, 2]]]  # tip value
-      # integrate over g1
-      # params for P(v1|g1,g3) = exp(mg1^2+ng1+og3^2+pg3+qg1g3+r
-      m <- -alphasigma2 - 1/(e2t1alpha/alpha-1/alpha)/sigma2 - 1/(2*sigmae2)
-      
-      p <- -2*alphasigma2*theta/(1 + et1alpha)
-      n <- -p*et1alpha + v1/sigmae2
-      
-      o <- 1/(1/alpha - e2t1alpha/alpha)/sigma2
-      q <- -2*o*et1alpha
-      
-      r <- -(alphasigma2*(et1alpha - 1)*theta^2)/(et1alpha + 1) -
-        v1^2/(2*sigmae2) - log(pi) - log(sigma) - log(sigmae) -
-        0.5*log(2*(1 - 1/e2t1alpha)/alpha)
-      
-     # print(paste('TIP: t1=', t1))
-      paramsIntegForkOUR(m, n, o, p, q, r)
-    }
-  } else {
-    esubs <- edgesFrom(tree, tree$edge[e, 2])
-    #print('PSUBS:')
-    
-    abc <- paramsForkOUR2(tree, x, esubs[1], alpha, theta, sigma, sigmae)
-    for(es in esubs[-1]) { 
-      abc <- abc + paramsForkOUR2(tree, x, es, alpha, theta, sigma, sigmae)
-    }
-    
-    t3 <- tree$edge.length[[e]]
-    et3alpha <- exp(t3*alpha)
-    e2t3alpha <- et3alpha^2
-    
-    # params for fCondOU(g3|g4) = exp(mg3^2+ng3+og4^2+pg4+qg3g4+r)
-    m <- -alphasigma2 - 1/(e2t3alpha/alpha-1/alpha)/sigma2
-    
-    p <- (-2*alphasigma2*theta)/(1 + et3alpha)
-    n <- -p*et3alpha
-    
-    o <- 1/(1/alpha - e2t3alpha/alpha)/sigma2
-    q <- -2*o*et3alpha
-    
-    r <- 0.5*log(alphasigma2/(pi*(1 - 1/e2t3alpha))) +
-      ((1 - et3alpha)*alpha*theta^2)/((1 + et3alpha)*sigma2)
-    
-    #print(paste('PFFC: t3=', t3))
-    pffc <- paramsForkForkCondOUR(abc[1], abc[2], abc[3],
-                                   m, n, o, p, q, r)
-    paramsIntegForkOUR(pffc[1], pffc[2], pffc[3], pffc[4], pffc[5], pffc[6])
-  }
-}
-
-paramsForkForkCondOUR <- function(i, j, k, 
-                                   m, n, o, p, q, r) {
-  # exp(i1*g3^2+j1*g3+k1)*exp(i2*g3^2+j2*g3+k2)*exp(mg3^2+ng3+og4^2+pg4+qg3g4+r)
-  #  = exp(x*g3^2 + y*g3 + o*g4^2 + p*g4 + q*g3g4 + w)
-  res <- c(i+m, j+n, o, p, q, k+r)
-#   cat('paramsForkForkCondOUR: ')
-#   if(class(m)=='mpfr') {
-#     print(toNum(round(c(i, j, k, m, n, o, p, q, r, res))))
-#   } else {
-#     print(round(c(i, j, k, m, n, o, p, q, r, res), digits=4))
-#   }
-  res
-}
-
-paramsIntegForkOUR <- function(a, b, c, d, e, f) {
-  # Integrate[exp(ag3^2+bg3+cg4^2+dg4+eg3g4+f), (g3, -Inf, Inf)]
-  #    = x*g4^2 + y*g4 + w
-  if(any(is.na(a) | a >= 0)) {
-    warning(paste("paramsIntegForkOUR: Definite integral is not converging to a finite number, argument a should be negative, but was", a))
-    c(NA, NA, NA)    
-  } else {
-    # a < 0
-    res <- c(c-e*e/(4*a), d-b*e/(2*a), log(sqrt(-pi/a))-b*b/(4*a)+f) 
-#         cat('paramsIntegForkOUR: ')
-#         if(class(a)=='mpfr') {
-#           print(toNum(round(c(a, b, c, d, e, f, res))))
-#         } else {
-#           print(round(c(a, b, c, d, e, f, res), digits=4))
-#         }
-    res
-  }
-}
