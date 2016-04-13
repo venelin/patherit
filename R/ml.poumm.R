@@ -2,8 +2,8 @@ NULL
 
 #' Find a maximum likelihood fit of the POUMM model
 #'
-#' @param v Either a numeric vector containing the phenotypic values at the tips of tree or
-#' a named list containing named elements v - a numeric vector and tree - a phylo object. 
+#' @param z Either a numeric vector containing the phenotypic values at the tips of tree or
+#' a named list containing named elements z - a numeric vector and tree - a phylo object. 
 #' @param tree a phylo object
 #' @param distgr character vector, see parameter distgr of the lik.poumm function
 #' @param parFixed a named numeric vector, indicating fixed values for some of the parameters
@@ -22,15 +22,23 @@ NULL
 #' @return a list containing an element par and an element value as well as the parameters passed
 #' 
 #' @export
-ml.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), parFixed=c(), 
+ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(), 
                      parMin=c(alpha=0, theta=0, sigma=0, sigmae=0), 
                      parMax=c(alpha=100, theta=10, sigma=20, sigmae=10),
                      divideEdgesBy=1, control=list(), verbose=FALSE, ...) {
-  if(is.list(v)) {
-    p <- v
-    v <- p$v
+  if(is.list(z)) {
+    p <- z
+    z <- p$z
+    if(is.null(z)) {
+      z <- p$v
+    }
     tree <- p$tree
+    
+    if(is.null(z)|is.null(tree)) {
+      stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" and a phylo-object named "tree"')
+    }
   }
+  
   if(divideEdgesBy!=1) {
     tree$edge.length <- tree$edge.length/divideEdgesBy
   }
@@ -119,8 +127,8 @@ ml.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
   
   minusll <- memoriseMin(function(par, ...) {
     value <- -do.call(lik.poumm, 
-                      c(list(v, tree), as.list(parFixedNoAlpha), as.list(par), list(log=T, distgr=distgr), 
-                        list(impl='R5', pruneInfo=pruneInfo), list(...)))
+                      c(list(z, tree), as.list(parFixedNoAlpha), as.list(par), list(log=T, distgr=distgr), 
+                        list(pruneInfo=pruneInfo), list(...)))
     if(is.na(value) | is.nan(value) | is.infinite(value)) {
       1e20
     } else {

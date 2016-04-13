@@ -87,8 +87,8 @@ analyseMCMCs <- function(chains, stat=function(x, ...) {x}, statName=NULL,
 
 #' MCMC-sampling from a posterior distribution of a PMM(OU) model given data and a prior distribution
 #'
-#' @param v Either a numeric vector containing the phenotypic values at the tips of tree or
-#' a named list containing named elements v - a numeric vector and tree - a phylo object. 
+#' @param z Either a numeric vector containing the phenotypic values at the tips of tree or
+#' a named list containing named elements z - a numeric vector and tree - a phylo object. 
 #' @param tree a phylo object
 #' @param distgr character vector, see parameter distgr of the lik.poumm function
 #' @param divideEdgesBy numeric, by which all branch lengths in the tree 
@@ -115,7 +115,7 @@ analyseMCMCs <- function(chains, stat=function(x, ...) {x}, statName=NULL,
 #' 
 #' 
 #' @export
-mcmc.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1, 
+mcmc.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1, 
                        parToATSSe=function(par) {c(par[1], par[2], sqrt(par[3:4]))},
                        parInit=function(chainNo) {c(alpha=0, theta=0, sigma2=1, sigmae2=1)},
                        parPrior=function(par) {
@@ -144,11 +144,19 @@ mcmc.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
          scale.start=obj$scale.start)
   }
   
-  if(is.list(v)) {
-    p <- v
-    v <- p$v
+  if(is.list(z)) {
+    p <- z
+    z <- p$z
+    if(is.null(z)) {
+      z <- p$v
+    }
     tree <- p$tree
+    
+    if(is.null(z)|is.null(tree)) {
+      stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" and a phylo-object named "tree"')
+    }
   }
+  
   if(divideEdgesBy!=1) {
     tree$edge.length <- tree$edge.length/divideEdgesBy
   }
@@ -168,8 +176,8 @@ mcmc.poumm <- function(v, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
       } else {
         atsse <- parToATSSe(par)
         names(atsse) <- NULL
-        lik <- lik.poumm(v, tree, alpha=atsse[1], theta=atsse[2], sigma=atsse[3], sigmae=atsse[4], 
-                          distgr=distgr[1], log=T, impl='R5', pruneInfo=pruneInfo, ...)
+        lik <- lik.poumm(z, tree, alpha=atsse[1], theta=atsse[2], sigma=atsse[3], sigmae=atsse[4], 
+                          distgr=distgr[1], log=T, pruneInfo=pruneInfo, ...)
       }
       pr+lik  
     }

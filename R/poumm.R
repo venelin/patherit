@@ -162,7 +162,7 @@ likGETreeOU <- function(g, tree, alpha, theta, sigma,
 #' @param sigmagr see distgr
 #' @param log Logical indicating whether log-likelihood should be returned instead
 #'    of likelihood, default is TRUE.
-#' @param pruneInfo list returned by prune(tree) to be passed in explicit calls to lik.poumm. 
+#' @param pruneInfo list returned by pruneTree(tree) to be passed in explicit calls to lik.poumm. 
 #' @param usempfr,maxmpfr integer indicating if and how mpfr should be used for small parameter values 
 #'    (any(c(alpha, sigma, sigmae) < 0.01)). Using the mpfr package can be forced by specifying an 
 #'    integer greater or equal to 2. Setting usempfr=0 disables high precision likelihood calculation.
@@ -176,7 +176,7 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
                        distgr=c('normal', 'maxlik'), 
                        mugr=theta, 
                        sigmagr=ifelse(alpha==0&sigma==0, 0, sigma/sqrt(2*alpha)),
-                       log=T, pruneInfo=NULL,
+                       log=T, pruneInfo=pruneTree(tree),
                        usempfr=1, maxmpfr=2, precbits=512, debug=F) {
   alphaorig <- alpha
   thetaorig <- theta
@@ -306,11 +306,11 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
               pif[edgeEnds, 2] <- -2 * etalphag1thetatheta * fe2talphasigma2[es]
               pif[edgeEnds, 3] <- r0[es] + etalphag1thetatheta^2 * fe2talphasigma2[es]
             } else {
-              v1 <- z[edgeEnds]  # tip values
+              z1 <- z[edgeEnds]  # tip values
               
               u <- -0.5/sigmae2
-              v <- v1/sigmae2
-              w <- -0.5*loge2 - 0.5*logpi  - v1^2/(2*sigmae2) - logsigmae 
+              v <- z1/sigmae2
+              w <- -0.5*loge2 - 0.5*logpi  - z1^2/(2*sigmae2) - logsigmae 
               
               gutalphasigma2 <- (fe2talpha[es]-alpha+u*sigma2)/fe2talpha[es]
               
