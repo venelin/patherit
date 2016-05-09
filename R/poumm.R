@@ -1,8 +1,22 @@
 # Implementation of the POUMM likelihood and heritability estimators
 
 NULL
-                       
-#' Variance covariance matrix of tips in an OUTree
+
+#' Expected value of the Ornstein-Uhlenbeck process conditioned on initial value
+#' @param g0 numeric, initial value
+#' @param alpha the strength of the selection
+#' @param theta long term mean value of the OU process
+#' @param sigma the unit-time standard deviation of the random component in the OU
+#'     process.
+#' @param t time at which the expected value should be estimated
+#' @export
+mu.poumm <- function(g0, alpha, theta, sigma, t=Inf) {
+  ifelse(t==Inf, 
+         theta,
+         theta + (g0 - theta)*exp(-alpha*t))
+}
+
+#' POUMM variance covariance matrix of tips
 #' 
 #' @param tree a phylo object
 #' @param alpha a non-negative numeric, default is 0
@@ -16,7 +30,7 @@ NULL
 #' @references (Hansen 1997) Stabilizing selection and the comparative analysis
 #'   of adaptation.
 #' @export
-covOUTree <- function(tree, alpha=0, sigma=1, sigmae=0, corr=F, tanc=NULL) {
+cov.poumm <- function(tree, alpha=0, sigma=1, sigmae=0, corr=F, tanc=NULL) {
   N <- length(tree$tip.label)
   
   # distances from the root to the mrca's of each tip-couple.
@@ -43,6 +57,43 @@ covOUTree <- function(tree, alpha=0, sigma=1, sigmae=0, corr=F, tanc=NULL) {
   } else {
     covij
   }  
+}
+
+#' Max-likelihood distribution of the genotypic values under a POUMM fit
+#' 
+#' @param tree an object of class phylo
+#' @param z A numeric vector of size length(tree$tip.label) representing the trait
+#'     values at the tip-nodes.
+#'@export
+g.poumm <- function(z, tree, fit.poumm, divideEdgesBy=fit.poumm$divideEdgesBy) {
+  N <- length(tree$tip.label)
+  
+  alpha <- fit.poumm$par[1]
+  theta <- fit.poumm$par[2]
+  sigma <- fit.poumm$par[3]
+  sigmae <- fit.poumm$par[4]
+  g0 <- attr(fit.poumm$value, 'grmax')
+
+  tree$edge.length <- tree$edge.length/divideEdgesBy
+  
+  V.g <- cov.poumm(tree, alpha, sigma, sigmae)
+  V.g_1 <- chol2inv(chol(V.g))
+  mu.g <- mu.poumm(g0, alpha=alpha, theta=theta, sigma=sigma, t=nodeTimes(tree)[1:N])
+  
+  V.e <- diag(sigmae^2, nrow=N, ncol=N)
+  V.e_1 <- V.e
+  diag(V.e_1) <- 1/diag(V.e)
+  mu.e <- z
+  
+  V.g.poumm <- try(chol2inv(chol(V.g_1+V.e_1)), silent = TRUE)
+  if(class(V.g.poumm)=='try-error') {
+    warning(V.g.poumm)
+    list(V.g=V.g, V.g_1=V.g_1, mu.g=mu.g, V.e=V.e, V.e_1=V.e_1, mu.e=mu.e)
+  } else {
+    mu.g.poumm <- V.g.poumm%*%(V.g_1%*%mu.g+V.e_1%*%mu.e)
+    
+    list(V.g=V.g, V.g_1=V.g_1, mu.g=mu.g, V.e=V.e, V.e_1=V.e_1, mu.e=mu.e, V.g.poumm=V.g.poumm, mu.g.poumm=mu.g.poumm)
+  }
 }
 
 #' Likelihood of observed node values given a tree
@@ -517,20 +568,4 @@ H2.poumm <- function(alpha, sigma, sigmae, t, tm=0
 }
 
 
-
-#' Expected value of the Ornstein-Uhlenbeck process conditioned on initial value
-#' @param g0 numeric, initial value
-#' @param alpha the strength of the selection
-#' @param theta long term mean value of the OU process
-#' @param sigma the unit-time standard deviation of the random component in the OU
-#'     process.
-#' @param t time at which the expected value should be estimated
-#' @export
-mu.poumm <- function(g0, alpha, theta, sigma, t=Inf) {
-  if(t==Inf) {
-    theta
-  } else {
-    theta + (g0 - theta)*exp(-alpha*t)
-  }
-}
 
