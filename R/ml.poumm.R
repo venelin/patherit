@@ -17,6 +17,7 @@ NULL
 #' if this parameter is set to 100, the resulting parameter alpha should be divided by 100 and the parameter 
 #' sigma should be divided by 10. 
 #' @param control list of parameters passed on to optim
+#' @param zName,treeName characters used when the parameter z is a list; indicate the names in the list of the values-vector and the tree. Default: 'z' and 'tree'.
 #' @param ... additional parameters passed to the lik.poumm function
 #' 
 #' @return a list containing an element par and an element value as well as the parameters passed
@@ -25,17 +26,18 @@ NULL
 ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(), 
                      parMin=c(alpha=0, theta=0, sigma=0, sigmae=0), 
                      parMax=c(alpha=100, theta=10, sigma=20, sigmae=10),
-                     divideEdgesBy=1, control=list(), verbose=FALSE, ...) {
+                     divideEdgesBy=1, control=list(), verbose=FALSE, 
+                     zName='z', treeName='tree', ...) {
   if(is.list(z)) {
     p <- z
-    z <- p$z
+    z <- p[[zName]]
     if(is.null(z)) {
-      z <- p$v
+      z <- p[['v']]
     }
-    tree <- p$tree
+    tree <- p[[treeName]]
     
     if(is.null(z)|is.null(tree)) {
-      stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" and a phylo-object named "tree"')
+      stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" or zName and a phylo-object named "tree" or treeName')
     }
   }
   

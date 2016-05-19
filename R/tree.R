@@ -309,4 +309,18 @@ sampleNodeIds <- function(tree) {
   id
 }
 
-
+#'Group tips according to distance from the root
+#'@param tree a phylo object
+#'@param nGroups integer, the desired number of groups (default 15)
+#'@export
+groupByRootDist <- function(tree, nGroups=15) {
+  N <- length(tree$tip.label)
+  rootTipDists <- nodeTimes(tree)[1:N]
+  
+  rootTipDistGroups <- cut(rootTipDists, 
+                           breaks=seq(min(rootTipDists), max(rootTipDists), length.out=nGroups))
+  names(rootTipDistGroups) <- tree$tip.label
+  
+    
+  
+}

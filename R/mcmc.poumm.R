@@ -96,23 +96,23 @@ analyseMCMCs <- function(chains, stat=function(x, ...) {x}, statName=NULL,
 #' and appropriate rescaling of the OU parameters alpha and sigma is not made. For example, 
 #' if this parameter is set to 100, the resulting parameter alpha should be divided by 100 and the parameter 
 #' sigma should be divided by 10. 
-#' @param parInit
-#' @param parPrior
-#' @param parToATSSe
-#' @param scale
-#' @param n.mcmc
-#' @param n.adapt
-#' @param thin
-#' @param acc.rate
-#' @param n.chains
-#' @param samplePrior
-#' @param analysis
+#' @param parInit a function(chainNumber) returning the starting point of the MCMC as a vector.
+#' @param parPrior a function(numeric-vector) returning the log-prior of the supplied vector
+#' @param parToATSSe a function(numeric-vector) transforming a sampled vector on the scale of the parameters
+#' alpha, theta, sigma, sigmae
+#' @param scale numeric matrix indicating the initial jump-distribution matrix
+#' @param n.mcmc integer indicating how many iterations should the mcmc-chain contain
+#' @param n.adapt integer indicating how many initial iterations should be used for adaptation of the jump-distribution matrix
+#' @param thin integer indicating the thinning interval of the mcmc-chain
+#' @param acc.rate numeric between 0 and 1 indicating the target acceptance rate
+#' @param n.chains integer indicating the number of chains to run. Defaults to 1. 
+#' @param samplePrior logical indicating if only the prior distribution should be sampled. This can be useful to compare with mcmc-runs for an overlap between prior and posterior distributions.
+#' @param analysis logical indicating whehter the sampled mcmc should be analysed.
+#' @param zName,treeName characters used when the parameter z is a list; indicate the names in the list of the values-vector and the tree. Default: 'z' and 'tree'.
 #' 
 #' @details Currently, this function calls the MCMC function from the adaptMCMC package.
 #' 
 #' @return a list of coda objects
-#' 
-#' 
 #' 
 #' @export
 mcmc.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1, 
@@ -131,7 +131,8 @@ mcmc.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
                                       0.00, 0.00, 100,  0.00,
                                       0.00, 0.00, 0.00, 100), nrow=4, ncol=4, byrow=T),
                        n.mcmc=1.2e6, n.adapt=2e5, thin=100, acc.rate=0.01, gamma=0.5, n.chains=1, samplePrior=F, ..., 
-                       analysis=list(stat=function(x) {x}, statName=NULL, thin=100)) {
+                       analysis=list(stat=function(x) {x}, statName=NULL, thin=100),
+                       zName='z', treeName='tree') {
   convertToMCMC <- function(obj, thin=1) {
     codaobj <- convert.to.coda(obj)
     winmcmc <- window(codaobj, start=start(codaobj), end=end(codaobj), thin=thin)
@@ -146,14 +147,14 @@ mcmc.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
   
   if(is.list(z)) {
     p <- z
-    z <- p$z
+    z <- p[[zName]]
     if(is.null(z)) {
-      z <- p$v
+      z <- p[['v']]
     }
-    tree <- p$tree
+    tree <- p[[treeName]]
     
     if(is.null(z)|is.null(tree)) {
-      stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" and a phylo-object named "tree"')
+      stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" or zName and a phylo-object named "tree" or treeName')
     }
   }
   

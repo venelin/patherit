@@ -18,5 +18,6 @@ Depends:
     ape,
     data.table,
     adaptMCMC,
-    coda
+    coda,
+    boot
 RoxygenNote: 5.0.1
