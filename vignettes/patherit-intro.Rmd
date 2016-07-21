@@ -12,11 +12,13 @@ keep_tex: true
 ```{r setup, include=F}
 library(knitr)
 library(rmarkdown)
-opts_chunk$set(size='tiny', out.extra='style="display:block; margin: auto;"', fig.align="center")
+#opts_chunk$set(size='tiny', out.extra='style="display:block; margin: auto;"', fig.align="center")
 
 #library(rmarkdown)
 # render('patherit-intro.Rmd', output_format='pdf_document', clean=TRUE)
-
+opts_chunk$set(dev='pdf',
+               dev.args=list(colormodel='cmyk', family='Helvetica', pointsize=10),
+               dpi=150)
 ```
 
 # Introduction
@@ -28,17 +30,18 @@ Note: The high-precision likelihood calculation is usually needed in case of acc
 
 # Installing the package
 ```{r install, eval=F}
-install.packages('patherit_0.2.tgz', type='binary', repos=NULL)
+#install.packages('patherit_0.2.tgz', type='binary', repos=NULL)
 ```
 
-# A Hello World example
+# An example with artificial phylogenetic and phenotypic data
 
+We begin by generating a phylogeny and phenotypic values at its tips.
 ```{r example, cache=TRUE}
 library(patherit)
 
 set.seed(1)
 # Number of tips
-N <- 1000
+N <- 2000
 # true parameters
 alpha <- 1
 theta <- 4.5
@@ -50,9 +53,15 @@ tree$edge.length <- tree$edge.length/10
 
 g <- generateTraitOU(tree, g0=6, alpha=alpha, theta=theta, sigma=sigma)
 z <- rnorm(N, mean=0, sd=sigmae)+g[1:N]
-
 ```
-# One likelihood calculation
+
+# Plot the phenotype along the tree
+```{r plottreedata, fig.width=4, fig.height=3}
+boxplotTraitAlongTree(z, tree, xlim=c(0, 1.8), boxwex=0.05, nGroups=10)
+```
+
+# Running a POUMM analysis
+## One likelihood calculation
 
 ```{r lik.poumm}
 # you need to do this only for performance speed-up and if you have
@@ -62,9 +71,8 @@ pruneInfo <- pruneTree(tree)
 lik <- lik.poumm(z, tree, alpha, theta, sigma, sigmae, log=T, distgr='maxlik', pruneInfo=pruneInfo)
 ```
 
-# Performing an ML-fit
-```{r ml-fit, echo=TRUE}
-
+## Performing an ML-fit
+```{r ml-fit, echo=TRUE, cache=TRUE}
 # maximum likelihood fit
 mlfit <- ml.poumm(z=z, tree=tree, distgr='maxlik', parMax=c(alpha=10, theta=10, sigma=10, sigmae=10))
 
@@ -74,9 +82,8 @@ print(mlfit$par)
 print(c(-mlfit$value, lik))
 ```
 
-# Performing an MCMC fit
+## Performing an MCMC fit
 ```{r mcmc-fit, echo=TRUE, results='hide', cache=TRUE}
-
 mcmcfit <- mcmc.poumm(z, tree, n.mcmc=2e5, n.adapt=20000, thin=100, acc.rate=0.1, divideEdgesBy=100,
                       scale=matrix(c(400,   0.00,  0.00,  0.00,
                                      0.00,  2.00,  0.00,  0.00,
@@ -96,7 +103,7 @@ mcmcAnalysis <- analyseMCMCs(chains=mcmcfit$chains,
                              start=1e5, end=2e5, thin=100)
 ```
 
-# Comparing point estimates
+## Comparing point estimates
 ```{r compare-results}
 # point-estimates of broad-sense heritability. 
 # A difference between H2eq and H2e, i.e. H2eq>H2e shows that the process has'nt still
@@ -111,6 +118,16 @@ print(c(
 print(mcmcAnalysis$HPD)
 ```
 
+# Running an ANOVA-CPP analysis
+```{r anova-cpp, cache=TRUE}
+cpps <- analyseCPPs(z, tree, CPPthr=0.05)
+cpps$analysis.CPP[c('rA', 'bCI95lower', 'bCI95upper')]
+```
+
+# Empirical heritability from known genotypic and environmental contributions
+```{r empirical}
+var(g)/var(z)
+```
 
 # Further information and help
 For further information, look in the package help-pages. If you cannot find the answer, please write to venelin.mitov@bsse.ethz.ch. 

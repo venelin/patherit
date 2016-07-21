@@ -16,18 +16,29 @@ NULL
 #' and appropriate rescaling of the OU parameters alpha and sigma is not made. For example, 
 #' if this parameter is set to 100, the resulting parameter alpha should be divided by 100 and the parameter 
 #' sigma should be divided by 10. 
-#' @param control list of parameters passed on to optim
+#' @param tol numeric accuracy parameter passed to optimize, defaults to 0.001. (see Details)
+#' @param control list of parameters passed on to optim, default list(factr=1e9), see ?optim.
 #' @param zName,treeName characters used when the parameter z is a list; indicate the names in the list of the values-vector and the tree. Default: 'z' and 'tree'.
+
 #' @param ... additional parameters passed to the lik.poumm function
-#' 
+#'
+#' @details If alpha is not fixed, then the optimization is done via 
+#' calls to optimize over alpha, calling optim on the remaining variable
+#' parameters for each alpha. The parameter tol is passed to optimize 
+#' (default value is 0.001), which guarantees that no evaluation is done
+#' on points closer than eps*|alpha*|+tol/3, where eps is 
+#' .Machine$double.eps and alpha* is the optimal alpha. 
 #' @return a list containing an element par and an element value as well as the parameters passed
 #' 
 #' @export
 ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(), 
                      parMin=c(alpha=0, theta=0, sigma=0, sigmae=0), 
                      parMax=c(alpha=100, theta=10, sigma=20, sigmae=10),
-                     divideEdgesBy=1, control=list(), verbose=FALSE, 
-                     zName='z', treeName='tree', ...) {
+                     divideEdgesBy=1, 
+                     tol=0.001, control=list(factr=1e8), 
+                     verbose=FALSE, 
+                     zName='z', treeName='tree',
+                     ...) {
   if(is.list(z)) {
     p <- z
     z <- p[[zName]]
@@ -64,26 +75,40 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     assign('par', NULL, pos=memo)
     assign('count', 0, pos=memo)
     
-    function(..., report=F) {
+    function(..., report=FALSE) {
       count <- get('count', memo)
       valMemo <- get('val', pos=memo)
       parMemo <- get('par', pos=memo)
-      log <- F
+      log <- FALSE
       if(report) {
         list(count=count, value=valMemo, g0=attr(valMemo, 'grmax'), par=parMemo)
       } else {
         count <- count+1
         assign('count', count, pos=memo)
-        val <- do.call(f, list(...))
-        params <- unlist(as.list(unlist(list(...)))[c('alpha', 'theta', 'sigma', 'sigmae')])
+        params <- list(...)
+        val <- do.call(f, params)
+        if(val<valMemo & !is.null(params[['usempfr']])) {
+          if(params[['usempfr']]<=0) {
+            if(verbose) {
+              cat('Forcing mpfr on val<currentMin:', val, '<', valMemo)
+            }
+            params[['usempfr']] <- params[['usempfr']]+1
+            val <- do.call(f, params)
+            if(verbose) {
+              cat('. New: ', val, '.\n')
+            }  
+          }
+        }
         if(val < valMemo) {
+          params <- unlist(as.list(unlist(list(...)))[c('alpha', 'theta', 'sigma', 'sigmae')])
           assign('par', params, pos=memo)
           assign('val', val, pos=memo)
           valMemo <- val
           parMemo <- params
-          log <- T
+          log <- TRUE
         } 
-        if(verbose&(count%%100==0|log)) {
+        if(verbose&(count%%1000==0|log)) {
+          params <- unlist(as.list(unlist(list(...)))[c('alpha', 'theta', 'sigma', 'sigmae')])
           cat('Count calls=', count, '; parMemo=', toString(round(parMemo, 6)), 
               '; valMemo=', valMemo, ';   ### par=', toString(round(params, 6)), 
               '; value=', val, '\n', sep='')
@@ -129,7 +154,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
   
   minusll <- memoriseMin(function(par, ...) {
     value <- -do.call(lik.poumm, 
-                      c(list(z, tree), as.list(parFixedNoAlpha), as.list(par), list(log=T, distgr=distgr), 
+                      c(list(z, tree), as.list(parFixedNoAlpha), as.list(par), list(log=TRUE, distgr=distgr), 
                         list(pruneInfo=pruneInfo), list(...)))
     if(is.na(value) | is.nan(value) | is.infinite(value)) {
       1e20
@@ -138,7 +163,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     }
   })
   
-  optimFixedAlpha <- memoriseAll(function(alpha, parFixed, parMin, parMax, lastResult=NULL, useLastResult=T, ...) {
+  optimFixedAlpha <- memoriseAll(function(alpha, parFixed, parMin, parMax, lastResult=NULL, useLastResult=TRUE, ...) {
     
     if(useLastResult & is.list(lastResult) & all(lastResult$par>=parMin) & all(lastResult$par<=parMax)) {
       parInit <- lastResult$par
@@ -154,7 +179,6 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
       }
     }
     if(!is.null(parInit)) {
-      #cat('optimFixedAlpha called on alpha=', alpha, ', parFixed=', toString(parFixed), ', parInit=', parInit, ', ...=', toString(list(...)), '\n')
       res <- optim(par=parInit, fn=minusll, gr=NULL, alpha=alpha, ..., method='L-BFGS-B', lower=parMin, upper=parMax, control=control)
       res$alpha <- alpha
       res  
@@ -174,7 +198,8 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     # as a workaround we call it a second time
     optimFixedAlpha(alpha=alphaFixed, parFixed=parFixedNoAlpha, parMin=parMin, parMax=parMax, valueOnly=F, useLastResult=F, hideLastResultOnNextCall=F, ...)
   } else {
-    lowerAlpha <- 2^c(floor(log2(parMin['alpha'])), seq(max(1, ceiling(log2(parMin['alpha']))), ceiling(log2(parMax['alpha']))+1, by=1))
+    lowerAlpha <- 2^c(floor(log2(parMin['alpha'])), 
+                      seq(max(1, ceiling(log2(parMin['alpha']))), ceiling(log2(parMax['alpha']))+1, by=1))
     if(length(lowerAlpha)>2) {
       upperAlpha <- lowerAlpha[-(1:2)]
       lowerAlpha <- lowerAlpha[1:(length(lowerAlpha)-2)]
@@ -190,8 +215,12 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     res <- list()
     for(i in 1:length(lowerAlpha)) {
       optimFixedAlpha(hideLastResultOnNextCall=T)
-      optimise(optimFixedAlpha, interval=c(lowerAlpha[i], upperAlpha[i]), parFixed=parFixedNoAlpha, 
-               parMin=parMinNoAlpha, parMax=parMaxNoAlpha, valueOnly=T, ...)
+      optimise(optimFixedAlpha, 
+               interval=c(lowerAlpha[i], upperAlpha[i]), 
+               tol=tol, 
+               parFixed=parFixedNoAlpha, 
+               parMin=parMinNoAlpha, parMax=parMaxNoAlpha, 
+               valueOnly=TRUE, ...)
     } 
   }
   minRep <- minusll(report=T)

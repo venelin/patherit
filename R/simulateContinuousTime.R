@@ -23,10 +23,12 @@ library(data.table)
 #' pathogen genotype indices, returning a numeric vector of the same size as the es with per-locus mutation rates.
 #' @param rateTransTemplate a square matrix of size n x (n-1) containing the factor by which the per locus 
 #' mutation rate must be multiplied in order to obtain a transition rate between any two pathogen genotypes. See
-#' the function rateTransTemplate_32 for a 2-loci scenario with 3 alleles for the first locus and two alleles for 
-#' the second locus. rateTransTemplate[i,j] should be the factor for transition rate from state i to state j. By
+#' the function generateRateTransTemplate. rateTransTemplate[i,j] should be the factor for transition rate from state i to state j. By
 #' definition of transition rate matrices the transition from a state to itself is always the negative sum of the 
-#' transition rates to the other states. 
+#' transition rates to the other states. This parameter needs not to be specified explicitly if the 
+#' parameter numsAllelesAtSites is specified (see below). 
+#' @param numsAllelesAtSites integer vector specifying the number of alleles at each site, 
+#' the length of the vector defining the number of QTLs. 
 #' @param eUniqForEachG logical indicating should the special environmental effect in an individual be drawn for
 #' each possible pathogen genotype or should there be a single special environmental effect for all genotypes.
 #' @param selectWithinHost logical indicating if there is selection for higher trait values within a host. When 
@@ -45,7 +47,8 @@ library(data.table)
 #' @export
 simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850, 
                              pe, sde, pg.init, GEValues, rateContact, rateInfect, rateDie, rateSample, 
-                             rateMutate, rateTransTemplate,
+                             rateMutate, rateTransTemplate=generateRateTransTemplate(numsAllelesAtSites),
+                             numsAllelesAtSites=NULL,
                              eUniqForEachG=FALSE, selectWithinHost=FALSE, timeStep=.1, 
                              maxTime=1200, maxNTips=8000, expandTimeAfterMaxNTips=1.5,
                              reportInterval=12,  ...) {
@@ -53,10 +56,10 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   nEnvs <- length(pe)
   
   largs <- list(pe, sde, pg.init, GEValues, rateContact, rateInfect, rateDie, rateSample, 
-                rateMutate, rateTransTemplate, 
+                rateMutate, rateTransTemplate, numsAllelesAtSites, 
                 eUniqForEachG, selectWithinHost, timeStep)
   names(largs) <- c('pe', 'sde', 'pg.init', 'GEValues', 'rateContact', 'rateInfect', 'rateDie', 'rateSample', 
-                    'rateMutate', 'rateTransTemplate',
+                    'rateMutate', 'rateTransTemplate', 'numsAllelesAtSites',
                     'eUniqForEachG', ' selectWithinHost', 'timeStep')
   print('Simulating epidemic on:') 
   for(i in names(largs)) {
@@ -91,8 +94,9 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   while(!done) {  
     if(is.null(gen)|countActive==0) {
       l <- stepContTimenxNorm(l$N, nu, mu, NULL, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
-                              rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
-                              rateMutate=rateMutate, rateTransTemplate, 
+                              rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, 
+                              rateSample=rateSample, 
+                              rateMutate=rateMutate, rateTransTemplate=rateTransTemplate, 
                               eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost, 
                               timeStep=timeStep, t=iter, fadingEpidemic=fadingEpidemic)
       if(l$hasNewInfections) {
@@ -103,7 +107,7 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
     } else {
       l <- stepContTimenxNorm(l$N, nu, mu, gen, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
                               rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
-                              rateMutate=rateMutate, rateTransTemplate,
+                              rateMutate=rateMutate, rateTransTemplate=rateTransTemplate,
                               eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost,
                               edge=l$edge, edge.length=l$edge.length, nTips=l$nTips, timeStep=timeStep, t=iter, 
                               fadingEpidemic=fadingEpidemic)
@@ -132,8 +136,10 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
     if((iter*timeStep)%%1==0) {
       epid <- list(gen=gen, timeStep=timeStep)
       cnt <- c(iter*timeStep, nrow(gen), 
-               l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]), l$nTips, nrow(gen[alive==0]), 
-               mean(l$zActive), sd(l$zActive), quantile(l$zActive, probs=c(0, .025, .25, .5, .75, .975, 1)), 
+               l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]), l$nTips, 
+               nrow(gen[alive==0]), 
+               mean(l$zActive, na.rm=TRUE), sd(l$zActive, na.rm=TRUE), 
+               quantile(l$zActive, probs=c(0, .025, .25, .5, .75, .975, 1), na.rm=TRUE), 
                
                R2adj(epidemic=epid, GEValues=GEValues, sampledOnly=FALSE, activeOnly=TRUE), 
                rA(epidemic=epid, data=NULL, GEValues=GEValues, sampledOnly=FALSE, activeOnly=TRUE), 
@@ -175,8 +181,8 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
       if((iter*timeStep)%%reportInterval==0) {
         cat('### Time: ', iter*timeStep, '\n')
         names(cnt) <- countNames
-        print(c(cnt[1:7], cnt[c('H2A', 'betaA', 'nCouplesA', 'H2S', 'H2bAtInfectionA', 'betaAtInfectionA', 'H2bA')], 
-                cnt[-(1:35)]/as.vector(matrix(cnt[c('Y', 'Z')], nrow=(length(cnt)-35)/2, ncol=2, byrow=TRUE))))
+        print(round(c(cnt[1:7], cnt[c('R2adj.A', 'R2adj.S', 'rA.A', 'rA.S')], 
+                cnt[-(1:32)]/as.vector(matrix(cnt[c('Y', 'Z')], nrow=(length(cnt)-32)/2, ncol=2, byrow=TRUE))), digits=2))
       }
     }
   }
@@ -426,47 +432,26 @@ extractDRCouples <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FA
     
     couples[, gD0:=gd]
     couples[, gR0:=gd]
-    couples[, eR0:=eSpec(e, gd)]
+
+    if(nrow(couples)>0) {
+      couples[, eR0:=eSpec(e, gd)]
+    } else {
+      couples[, eR0:=c()]
+    }
     couples[, eD0:=ed]
     
     couples[, gD:=epidemic$gen[J(couples[, idD]), gene]]
     couples[, gR:=gene]
-    couples[, eD:=epidemic$gen[J(couples[, idD]), eSpec(e, gene)]]
-    couples[, eR:=eSpec(e, gR)]
+    if(nrow(couples)>0) {
+      couples[, eD:=epidemic$gen[J(couples[, idD]), eSpec(e, gene)]]
+      couples[, eR:=eSpec(e, gR)]
+    } else {
+      couples[, eD:=c()]
+      couples[, eR0:=c()]
+    }
+      
     
     couples
-  }
-}
-
-
-#' Extract phylogenetic pairs from a phylogeny
-#' @param tree a phylo object
-#' @param threshold numeric indicating the maximum pair distance that should be allowed in the returned pairs
-#' @param firstN integer indicating whether only the nearest firstN pairs should be returned
-#' @return a data.table with four columns:
-#' i, j : integers - the members of each phylogenetic pair. For each entry (i,j) a symmetric entry (j,i) is present; 
-#'    to obtain the corresponding tip labels in the tree use tree$tip.label[i] and tree$tip.label[j] respectively.
-#' d: the phylogenetic distance between i and j
-#' idPair: equal to min(i,j) for each entry - the identifier of each pair.
-#' @export
-extractPP <- function(tree, threshold=Inf, firstN=Inf) {
-  N <- length(tree$tip.label)
-  tipDists <- dist.nodes(tree)[1:N, 1:N]
-  diag(tipDists) <- Inf
-  pairs <- t(sapply(1:N, function(i) {
-    j <- which.min(tipDists[i, ])[1]; 
-    c(i, j, tipDists[i, j])
-  }))
-  colnames(pairs) <- c('i', 'j', 'd')
-  pp <- data.table(i=as.integer(pairs[, 'i']), j=as.integer(pairs[, 'j']), d=pairs[, 'd'],
-                   idPair=apply(pairs, 1, function(p) if(p['i'] == pairs[p['j'], 'j']) min(p['i'], p['j']) else NA))[!is.na(idPair)]
-  
-  if(!is.infinite(threshold)) {
-    pp[d<=threshold][order(idPair)]
-  } else if(!is.infinite(firstN)) {
-    pp[d<=order(d)[min(length(d), firstN)]][order(idPair)]
-  } else {
-    pp[order(idPair)]
   }
 }
 
@@ -522,7 +507,9 @@ b <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE, activeOnly=F
   } else if(!is.null(data)) {
     couples <- data
   } else {
-    couples <- extractDRCouples(epidemic=epidemic, sampledOnly=sampledOnly, activeOnly=activeOnly, tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
+    couples <- extractDRCouples(epidemic=epidemic, 
+                                sampledOnly=sampledOnly, activeOnly=activeOnly, 
+                                tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
   }
   
   if(nrow(couples) > 0) {
@@ -577,7 +564,9 @@ rA <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, active
   } else if(!is.null(data)) {
     pop <- data
   } else {
-    pop <- extractPop(epidemic, sampledOnly, activeOnly, tMin, tMax, firstN, lastN)
+    pop <- extractPop(epidemic=epidemic, 
+                      sampledOnly=sampledOnly, activeOnly=activeOnly, 
+                      tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
   }
   if(nrow(pop)>0) {
     if(!is.null(GEValues)) {
@@ -656,7 +645,9 @@ R2adj <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, act
   } else if(!is.null(data)) {
     pop <- data
   } else {
-    pop <- extractPop(epidemic, sampledOnly, activeOnly, tMin, tMax, firstN, lastN)
+    pop <- extractPop(epidemic=epidemic, 
+                      sampledOnly=sampledOnly, activeOnly=activeOnly, 
+                      tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
   }
   if(nrow(pop)>0) {
     if(!is.null(GEValues)) {
@@ -833,19 +824,65 @@ calcValue <- function(env, gene, e, GEValues) {
   GEValues[cbind(env, gene)] + eSpec(e, gene)
 }
 
-#'
-#' state transition template matrix (main diagonal omitted)
-#' element [i, j] is a multiplier for the rate of transition 
-#' from state i to state j+k, where k=1 if j>=i and k=0 otherwise
+#' Possible genotypes based on numbers of alleles at QTLs.
+#' 
+#' @param numsAllelesAtSites integer vector specifying the number of alleles at each site, 
+#' the length of the vector defining the number of QTLs.
+#' 
 #' @export
-rateTransTemplate_32 <- function() {
-  rbind(
-    c(1, 1/2, 0, 1/2, 0),
-    c(1, 0, 1/2, 0, 1/2),
-    c(1/2, 0, 1, 1/2, 0),
-    c(0, 1/2, 1, 0, 1/2),
-    c(1/2, 0, 1/2, 0, 1),
-    c(0, 1/2, 0, 1/2, 1))
+generateGenotypes <- function(numsAllelesAtSites) {
+  if(length(numsAllelesAtSites)==0) {
+    stop("numsAllelesAtSites should be an integer vector of numbers of alleles bigger than 1.")
+  } 
+  if(any(numsAllelesAtSites<=1)) {
+    stop("numsAllelesAtSites should be an integer vector of numbers of alleles bigger than 1.")
+  }
+  
+  genotypes <- as.matrix(expand.grid(sapply(rev(numsAllelesAtSites), 
+                                            function(all) 1:all))[, length(numsAllelesAtSites):1])
+  
+  
+  # a matrix of genotypes: each row is a genotype containing the names of the alleles at each site
+  genotypes <- apply(genotypes, 1, function(r) as.vector(r))
+  
+  if(is.matrix(genotypes)) {
+    genotypes <- t(genotypes)
+  } else {
+    genotypes <- as.matrix(genotypes)
+  }
+  
+}
+
+#' Generate a state transition template matrix based on numbers of alleles at QTLs.
+#' 
+#' @param numsAllelesAtSites integer vector specifying the number of alleles at each site, 
+#' the length of the vector defining the number of QTLs.
+#' @param nameRows logical indicating whether the returned matrix should have named rows
+#' (for explicative purpose only, default FALSE). The column names are different for each row, 
+#' i.e. the row-names excluding the genotype corresponding to that specific row.
+#' @details each element of the matrix is a multiplier for the corresponding genotype transition rate 
+#' (see function simulateEpidemic in the patherit package). This multiplier is nonzero only for transitions
+#' that need exactly one mutation (haming distance = 1) in order to convert one genotype into another.
+#' The 
+#' @export
+generateRateTransTemplate <- function(numsAllelesAtSites, nameRows=FALSE) {
+  genotypes <- generateGenotypes(numsAllelesAtSites)
+  #create the transition template matrix
+  transTemplate <- matrix(0, nrow=nrow(genotypes), ncol=nrow(genotypes)-1)
+
+  for(i in 1:nrow(genotypes)) 
+    for(j in (1:nrow(genotypes))[-i]) {
+      k <- j-as.integer(j>=i)
+      hammingDist <- sum(genotypes[i, ]!=genotypes[j, ])
+      if(hammingDist==1) {
+        transTemplate[i, k] <- 1/(numsAllelesAtSites[genotypes[i, ]!=genotypes[j, ]]-1)
+      }
+    }
+  if(nameRows) {
+    rownames(transTemplate) <- apply(genotypes, 1, function(g) do.call(paste0, as.list(g)))  
+  }
+  
+  transTemplate
 }
 
 # state-transition rates
@@ -986,6 +1023,8 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
   events <- sampleEvent(rates, timeStep)
   # event codes are:
   # 0: no event; 1: sampling; 2: death; 3: infect other; 4, 5, 6,... mutation
+  
+  #cat(sum(events>=4), '/', length(events), '\n')
   
   # update N
   if(!is.infinite(N)) {
