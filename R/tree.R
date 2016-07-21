@@ -137,7 +137,7 @@ cutUltrametric <- function(tree, maxNTips) {
   # outgoing edges from the root
   es <- edgesFrom(tree, nTips+1)
   
-  while(T) {
+  while(TRUE) {
     countLineages <- length(es)
     
     spikingEdge <- which.min(ndTimes[tree$edge[es, 2]])
@@ -312,15 +312,22 @@ sampleNodeIds <- function(tree) {
 #'Group tips according to distance from the root
 #'@param tree a phylo object
 #'@param nGroups integer, the desired number of groups (default 15)
+#'@param rootTipDists numeric vector of root to tip distances in the order of
+#'tree$tip.label. If not passed, this vector is calculated by the function nodeTimes().
 #'@export
-groupByRootDist <- function(tree, nGroups=15) {
+groupByRootDist <- function(tree, nGroups=15, rootTipDists=NULL) {
   N <- length(tree$tip.label)
-  rootTipDists <- nodeTimes(tree)[1:N]
+  if(is.null(rootTipDists))
+    rootTipDists <- nodeTimes(tree)[1:N]
   
   rootTipDistGroups <- cut(rootTipDists, 
                            breaks=seq(min(rootTipDists), max(rootTipDists), length.out=nGroups))
   names(rootTipDistGroups) <- tree$tip.label
   
-    
+  groupMeans <- sapply(levels(rootTipDistGroups), function(str) {
+    mean(eval(parse(text=paste0('c(',substr(str, 2, nchar(str)-1), ')'))))
+  })
+  
+  list(rootTipDists=rootTipDists, rootTipDistGroups=rootTipDistGroups, groupMeans=groupMeans)  
   
 }
