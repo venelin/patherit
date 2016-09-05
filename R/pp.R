@@ -18,7 +18,7 @@ cantorPairingNumber <- function(a, b, ordered=TRUE) {
 #' @return a data.table with four columns:
 #' i, j : integers - the members of each tip-pair. For each entry (i,j) a symmetric entry (j,i) is present;
 #'    to obtain the corresponding tip labels in the tree use tree$tip.label[i] and tree$tip.label[j] respectively.
-#' d: the phylogenetic distance between i and j
+#' tau: the phylogenetic distance between i and j
 #' idPair: the unique identifier of each pair.
 #' @export
 extractTipPairs <- function(tree, threshold=Inf, firstN=Inf) {
@@ -28,12 +28,12 @@ extractTipPairs <- function(tree, threshold=Inf, firstN=Inf) {
   pairs <- as.data.table(do.call(rbind, lapply(1:N, function(i) {
     cbind(i, (1:N)[-i], tipDists[i, -i])
   })))
-  setnames(pairs, c('i', 'j', 'd'))
+  setnames(pairs, c('i', 'j', 'tau'))
   pairs[, idPair:=cantorPairingNumber(i, j, ordered=FALSE)]
   if(!is.infinite(threshold)) {
-    pairs[d<=threshold][order(idPair)]
+    pairs[tau<=threshold][order(idPair)]
   } else if(!is.infinite(firstN)) {
-    pairs[d<=order(d)[min(length(d), firstN)]][order(idPair)]
+    pairs[tau<=order(tau)[min(length(tau), firstN)]][order(idPair)]
   } else {
     pairs[order(idPair)]
   }
@@ -48,7 +48,7 @@ extractTipPairs <- function(tree, threshold=Inf, firstN=Inf) {
 #' root to the most recent common ancestor of each couple of tips. This matrix is calculated by the 
 #' vcv function from the ape package and can be passed as parameter only for the sake of saving 
 #' calculation time if a call to vcv has already been executed on the tree.
-#' @return a data.table with four columns:
+#' @return a data.table with five columns:
 #' i, j : integers - the members of each phylogenetic pair. For each entry (i,j) a symmetric entry (j,i) is present; 
 #'    to obtain the corresponding tip labels in the tree use tree$tip.label[i] and tree$tip.label[j] respectively.
 #' tau: the phylogenetic distance between i and j
@@ -82,6 +82,44 @@ extractPP <- function(tree, threshold=Inf, firstN=Inf, vcvMat=vcv(tree)) {
   }
 }
 
+
+
+#' Extract (close) pairs from a distance matrix.
+#' @param distMat numeric N by N matrix (non-negative)
+#' @param threshold numeric indicating the maximum pair distance that should be allowed in the returned pairs
+#' @param firstN integer indicating whether only the nearest firstN pairs should be returned
+#'
+#' @return a data.table with four columns:
+#' i, j : integers - the members of each phylogenetic pair. For each entry (i,j) a symmetric entry (j,i) is present; 
+#' tau: the distance between i and j
+#' idPair: the unique identifier of each pair
+#' 
+#' @details This function is the non-phylogenetic analog to extractPP. Similar to 
+#' phylogenetic pairs (see extractPP), distance pairs are defined as pairs, each
+#' of which is the other's nearest
+#' @export
+extractPairsFromDistMat <- function(distMat, threshold=Inf, firstN=Inf) {
+  if(nrow(distMat)!=ncol(distMat)) {
+    stop('distMat should be squared.')
+  }
+  N <- nrow(distMat)
+  
+  pairs <- t(sapply(1:N, function(i) {
+    j <- (1:N)[-i][which.min(distMat[i, -i])[1]]; 
+    c(i, j, distMat[i, j])
+  }))
+  colnames(pairs) <- c('i', 'j', 'tau')
+  pp <- data.table(i=as.integer(pairs[, 'i']), j=as.integer(pairs[, 'j']), 
+                   tau=pairs[, 'tau'],
+                   idPair=apply(pairs, 1, function(p) if(p['i'] == pairs[p['j'], 'j']) cantorPairingNumber(p['i'], p['j'], ordered=FALSE) else NA))[!is.na(idPair)]
+  if(!is.infinite(threshold)) {
+    pp[tau<=threshold][order(idPair)]
+  } else if(!is.infinite(firstN)) {
+    pp[tau<=order(tau)[min(length(tau), firstN)]][order(idPair)]
+  } else {
+    pp[order(idPair)]
+  }
+}
 
 #' Bootstrap ANOVA 
 #' @param i integer vector identifiers of the individuals
@@ -118,7 +156,7 @@ rAboot <- function(i, idPair, z, bootstraps=1000) {
 #' article.
 #' @param zName,treeName characters used when the parameter z is a list; indicate the 
 #' @export
-analyseCPPs <- function(z, tree, CPPthr=10^-4, seed=10, ruleOutXIQR=1.5, zName='z', treeName='tree') {
+analyseCPPs <- function(z, tree, dists=NULL, CPPthr=10^-4, seed=10, ruleOutXIQR=1.5, zName='z', treeName='tree') {
   if(is.list(z)) {
     p <- z
     z <- p[[zName]]
@@ -135,11 +173,6 @@ analyseCPPs <- function(z, tree, CPPthr=10^-4, seed=10, ruleOutXIQR=1.5, zName='
   
   N <- length(tree$tip.label)
 
-  tipDists <- dist.nodes(tree)[1:N,1:N]
-  tipDists <- sapply(1:N, function(i) sapply(1:N, function(j) if(i>j) tipDists[i,j] else NA))
-  tipDists <- tipDists[!is.na(tipDists)]
-  zDists <- sapply(1:N, function(i) sapply(1:N, function(j) if(i>j) abs(z[i]-z[j]) else NA))
-  zDists <- zDists[!is.na(zDists)]
   pp <- extractPP(tree)
   setkey(pp, i)
   
@@ -149,12 +182,12 @@ analyseCPPs <- function(z, tree, CPPthr=10^-4, seed=10, ruleOutXIQR=1.5, zName='
   
   pp[!is.na(idPair), deltaz:=abs(z[1]-z[2]), by=idPair]
 
-  tree.noCPP <- drop.tip(tree, tip=pp[d<=CPPthr, i])
+  tree.noCPP <- drop.tip(tree, tip=pp[tau<=CPPthr, i])
   v.noCPP <- v[tree.noCPP$tip.label]
   
   tree.noOutl <- drop.tip(tree, 
-                                 tip=pp[d<=CPPthr & deltaz>{
-                                     q=quantile(unique(deltaz[d<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])
+                                 tip=pp[tau<=CPPthr & deltaz>{
+                                     q=quantile(unique(deltaz[tau<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])
                                    }, i])
   
   v.noOutl <- v[tree.noOutl$tip.label]
@@ -163,23 +196,23 @@ analyseCPPs <- function(z, tree, CPPthr=10^-4, seed=10, ruleOutXIQR=1.5, zName='
     set.seed(seed)
   }
   
-  analysis.CPP <- c(list(pp=pp[d<=CPPthr]), with(pp[d<=CPPthr], rAboot(i, idPair, z)))
+  analysis.CPP <- c(list(pp=pp[tau<=CPPthr]), with(pp[tau<=CPPthr], rAboot(i, idPair, z)))
   analysis.PP <- c(list(pp=pp), with(pp, rAboot(i, idPair, z)))
   
-  analysis.CPP.noOutl <- c(list(pp=pp[d<=CPPthr & 
+  analysis.CPP.noOutl <- c(list(pp=pp[tau<=CPPthr & 
                                deltaz<={
-                                 q=quantile(unique(deltaz[d<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}]),
-                  with(pp[d<=CPPthr & 
+                                 q=quantile(unique(deltaz[tau<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}]),
+                  with(pp[tau<=CPPthr & 
                             deltaz<={
-                              q=quantile(unique(deltaz[d<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}], 
+                              q=quantile(unique(deltaz[tau<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}], 
                        rAboot(i, idPair, z)))
   
   analysis.PP.noOutl <- c(list(pp=pp[deltaz<={
-    q=quantile(unique(deltaz[d<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}]),
-    with(pp[deltaz<={q=quantile(unique(deltaz[d<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}],
+    q=quantile(unique(deltaz[tau<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}]),
+    with(pp[deltaz<={q=quantile(unique(deltaz[tau<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}],
          rAboot(i, idPair, z)))
   
-  list(tipDists=tipDists, zDists=zDists, pp=pp, tree.noCPP=tree.noCPP, z.noCPP=v.noCPP,
+  list(pp=pp, tree.noCPP=tree.noCPP, z.noCPP=v.noCPP,
        tree.noOutl=tree.noOutl, z.noOutl=v.noOutl, 
        analysis.CPP=analysis.CPP, analysis.PP=analysis.PP, 
        analysis.CPP.noOutl=analysis.CPP.noOutl, analysis.PP.noOutl=analysis.PP.noOutl)
@@ -223,10 +256,10 @@ scatterPlotPPs <- function(z, tree, ppAnalysis, CPPthr=10^-4, ruleOutXIQR=1.5, z
      xlab=xlab, ylab=ylab, 
      xlim=xlim, ylim=ylim)
   pp[, points(x=log10(d), y=deltaz, pch=20, cex=0.25, col=adjustcolor('darkgreen', alpha.f=0.3))]
-  pp[d<=CPPthr, points(x=log10(d), y=deltaz, pch=20, cex=0.25, col=adjustcolor('magenta', alpha.f=0.3))]
-  pp[d<=CPPthr & 
+  pp[tau<=CPPthr, points(x=log10(d), y=deltaz, pch=20, cex=0.25, col=adjustcolor('magenta', alpha.f=0.3))]
+  pp[tau<=CPPthr & 
        deltaz>{
-         q=quantile(unique(deltaz[d<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}, 
+         q=quantile(unique(deltaz[tau<=CPPthr])); q[4]+ruleOutXIQR*(q[4]-q[2])}, 
      points(x=log10(d), y=deltaz, col='blue', pch=20, cex=0.4)]
 }
 
@@ -236,8 +269,9 @@ scatterPlotPPs <- function(z, tree, ppAnalysis, CPPthr=10^-4, ruleOutXIQR=1.5, z
 #' @export
 boxplotTraitAlongTree <- function(z, tree, nGroups=15, ...) {
   groups <- groupByRootDist(tree, nGroups=nGroups)
+  midDistPoints <- groups$groupMeans
   rootTipDistGroups <- groups$rootTipDistGroups
-  boxes <- list()
+  boxes <- lapply(midDistPoints, function(.) c())
 
   for(i in 1:length(rootTipDistGroups)) {
     boxes[[as.character(rootTipDistGroups[[i]])]] <-
@@ -245,8 +279,8 @@ boxplotTraitAlongTree <- function(z, tree, nGroups=15, ...) {
   }
 
   boxes <- boxes[sort(names(boxes))]
-  midDistPoints <- groups$groupMeans
   names(boxes) <- as.character(midDistPoints)
+  
   boxes <- lapply(boxes, function(.) as.numeric(.))
 
   params <- list(...)
