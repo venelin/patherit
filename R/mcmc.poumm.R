@@ -156,6 +156,12 @@ mcmc.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), divideEdgesBy=1,
     if(is.null(z)|is.null(tree)) {
       stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" or zName and a phylo-object named "tree" or treeName')
     }
+    if(any(is.na(z))|any(is.infinite(z))) {
+      stop('Check z for infinite or NA values!')
+    }
+    if(any(tree$edge.length<=0)|any(is.infinite(tree$edge.length))|any(is.na(tree$edge.length))) {
+      stop('Check the tree for non-finite or non-positive edge-lengths!')
+    }
   }
   
   if(divideEdgesBy!=1) {

@@ -1,12 +1,13 @@
 ---
-title: "A Tutorial for the patherit package"
-author: Venelin Mitov
-output:
-  html_document:
-  toc: true
 pdf_document:
-  toc: true
-keep_tex: true
+  toc: yes
+author: "Venelin Mitov"
+output:
+  html_document: null
+  pdf_document: default
+  toc: yes
+title: "A Tutorial for the patherit package"
+keep_tex: yes
 ---
   
 ```{r setup, include=F}
@@ -31,7 +32,7 @@ Note: The high-precision likelihood calculation is usually needed in case of acc
 
 # Installing the package
 ```{r install, eval=F}
-#install.packages('patherit_0.2.tgz', type='binary', repos=NULL)
+#install.packages('patherit_0.3.tgz', type='binary', repos=NULL)
 ```
 
 # An example with artificial phylogenetic and phenotypic data

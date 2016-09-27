@@ -67,31 +67,31 @@ cov.poumm <- function(tree, alpha=0, sigma=1, sigmae=0, corr=F, tanc=NULL) {
 #' @export
 g.poumm <- function(z, tree, fit.poumm, divideEdgesBy=fit.poumm$divideEdgesBy) {
   N <- length(tree$tip.label)
-
+  
   alpha <- fit.poumm$par[1]
   theta <- fit.poumm$par[2]
   sigma <- fit.poumm$par[3]
   sigmae <- fit.poumm$par[4]
   g0 <- attr(fit.poumm$value, 'grmax')
-
+  
   tree$edge.length <- tree$edge.length/divideEdgesBy
-
+  
   V.g <- cov.poumm(tree, alpha, sigma, sigmae)
   V.g_1 <- chol2inv(chol(V.g))
   mu.g <- mu.poumm(g0, alpha=alpha, theta=theta, sigma=sigma, t=nodeTimes(tree)[1:N])
-
+  
   V.e <- diag(sigmae^2, nrow=N, ncol=N)
   V.e_1 <- V.e
   diag(V.e_1) <- 1/diag(V.e)
   mu.e <- z
-
+  
   V.g.poumm <- try(chol2inv(chol(V.g_1+V.e_1)), silent = TRUE)
   if(class(V.g.poumm)=='try-error') {
     warning(V.g.poumm)
     list(V.g=V.g, V.g_1=V.g_1, mu.g=mu.g, V.e=V.e, V.e_1=V.e_1, mu.e=mu.e)
   } else {
     mu.g.poumm <- V.g.poumm%*%(V.g_1%*%mu.g+V.e_1%*%mu.e)
-
+    
     list(V.g=V.g, V.g_1=V.g_1, mu.g=mu.g, V.e=V.e, V.e_1=V.e_1, mu.e=mu.e, V.g.poumm=V.g.poumm, mu.g.poumm=mu.g.poumm)
   }
 }
@@ -227,8 +227,8 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
                        distgr=c('normal', 'maxlik'), 
                        mugr=theta, 
                        sigmagr=ifelse(alpha==0&sigma==0, 0, sigma/sqrt(2*alpha)),
-                       log=T, pruneInfo=pruneTree(tree),
-                       usempfr=1, maxmpfr=2, precbits=512, debug=F) {
+                       log=TRUE, pruneInfo=pruneTree(tree),
+                       usempfr=1, maxmpfr=2, precbits=512, debug=FALSE) {
   alphaorig <- alpha
   thetaorig <- theta
   sigmaorig <- sigma
@@ -264,7 +264,7 @@ lik.poumm <- function(z, tree, alpha, theta, sigma, sigmae=0,
       usempfr <- 2 # indicate for later code that we shall convert to mpfr!
     }
      
-    done <- F
+    done <- FALSE
     # this loop governs the use of mpfr
     while(!done & usempfr <= maxmpfr) { 
       if(availRmpfr & usempfr >= 2) {

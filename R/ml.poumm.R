@@ -16,6 +16,10 @@ NULL
 #' and appropriate rescaling of the OU parameters alpha and sigma is not made. For example, 
 #' if this parameter is set to 100, the resulting parameter alpha should be divided by 100 and the parameter 
 #' sigma should be divided by 10. 
+#' @param optimizeInSteps logical indicating whether to split the interval (parMin['alpha'], parMax['alpha'])
+#' into sub-intervals and call optimize separately in each of these intervals. Using this may be of help in case
+#' of multiple local optimums, but results in slower search. Default: FALSE. This parameter does not have any
+#' effect if alpha is a fixed parameter (see parFixed).
 #' @param tol numeric accuracy parameter passed to optimize, defaults to 0.001. (see Details)
 #' @param control list of parameters passed on to optim, default list(factr=1e9), see ?optim.
 #' @param zName,treeName characters used when the parameter z is a list; indicate the names in the list of the values-vector and the tree. Default: 'z' and 'tree'.
@@ -35,7 +39,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
                      parMin=c(alpha=0, theta=0, sigma=0, sigmae=0), 
                      parMax=c(alpha=100, theta=10, sigma=20, sigmae=10),
                      divideEdgesBy=1, 
-                     tol=0.001, control=list(factr=1e8), 
+                     optimizeInSteps=FALSE, tol=0.001, control=list(factr=1e8),  
                      verbose=FALSE, 
                      zName='z', treeName='tree',
                      ...) {
@@ -49,6 +53,12 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     
     if(is.null(z)|is.null(tree)) {
       stop('If a list is supplied as argument z, this list should contain a vector of trait values named "z" or zName and a phylo-object named "tree" or treeName')
+    }
+    if(any(is.na(z))|any(is.infinite(z))) {
+      stop('Check z for infinite or NA values!')
+    }
+    if(any(tree$edge.length<=0)|any(is.infinite(tree$edge.length))|any(is.na(tree$edge.length))) {
+      stop('Check the tree for non-finite or non-positive edge-lengths!')
     }
   }
   
@@ -122,10 +132,10 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     memo <- new.env()
     assign('results', NULL, pos=memo)
     
-    function(..., report=F, valueOnly=T, hideLastResultOnNextCall=F) {
+    function(..., report=FALSE, valueOnly=TRUE, hideLastResultOnNextCall=FALSE) {
       if(hideLastResultOnNextCall) {
         # for the next call, don't pass the last result
-        assign('hideLastResult', T, pos=memo)
+        assign('hideLastResult', TRUE, pos=memo)
       } else {
         results <- get('results', pos=memo)
         if(report) {
@@ -135,7 +145,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
           if(hideLastResult) {
             res <- do.call(f, list(...))
             # enable passing last result on the next call
-            assign('hideLastResult', F, pos=memo)
+            assign('hideLastResult', FALSE, pos=memo)
           } else {
             res <- do.call(f, list(..., lastResult=results[[length(results)]]))  
           }
@@ -164,7 +174,6 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
   })
   
   optimFixedAlpha <- memoriseAll(function(alpha, parFixed, parMin, parMax, lastResult=NULL, useLastResult=TRUE, ...) {
-    
     if(useLastResult & is.list(lastResult) & all(lastResult$par>=parMin) & all(lastResult$par<=parMax)) {
       parInit <- lastResult$par
     } else {
@@ -200,7 +209,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
   } else {
     lowerAlpha <- 2^c(floor(log2(parMin['alpha'])), 
                       seq(max(1, ceiling(log2(parMin['alpha']))), ceiling(log2(parMax['alpha']))+1, by=1))
-    if(length(lowerAlpha)>2) {
+    if(optimizeInSteps & length(lowerAlpha)>2) {
       upperAlpha <- lowerAlpha[-(1:2)]
       lowerAlpha <- lowerAlpha[1:(length(lowerAlpha)-2)]
       upperAlpha[upperAlpha>parMax['alpha']] <- parMax['alpha']
@@ -214,7 +223,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
     parMaxNoAlpha <- parMax[setdiff(names(parMax), 'alpha')]
     res <- list()
     for(i in 1:length(lowerAlpha)) {
-      optimFixedAlpha(hideLastResultOnNextCall=T)
+      optimFixedAlpha(hideLastResultOnNextCall=TRUE)
       optimise(optimFixedAlpha, 
                interval=c(lowerAlpha[i], upperAlpha[i]), 
                tol=tol, 
@@ -223,7 +232,7 @@ ml.poumm <- function(z, tree, distgr=c('maxlik', 'normal'), parFixed=c(),
                valueOnly=TRUE, ...)
     } 
   }
-  minRep <- minusll(report=T)
+  minRep <- minusll(report=TRUE)
   minRep$par <- c(minRep$par, parFixed)[c('alpha', 'theta', 'sigma', 'sigmae')]
   allRep <- optimFixedAlpha(report=T)
   c(minRep, allRep, list(distgr=distgr, parFixed=parFixed, 

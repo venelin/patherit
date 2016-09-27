@@ -1,7 +1,7 @@
 Type: Package
 Package: patherit
 Title: Pathogen Trait Heritability
-Version: 0.3
+Version: 0.4
 Date: 2016-07-20
 Author: Venelin Mitov
 Maintainer: <venelin.mitov@bsse.ethz.ch>
