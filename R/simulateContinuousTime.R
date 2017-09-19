@@ -43,24 +43,31 @@ library(data.table)
 #' @param reportInterval positive integer, time interval at which some statistics such as total infected and 
 #' recovered counts and frequencies of genotypes in the population are stored.
 #' 
+#' @import ape
+#' @import data.table
+#' 
 #' @return A list of objects 
 #' @export
-simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850, 
-                             pe, sde, pg.init, GEValues, rateContact, rateInfect, rateDie, rateSample, 
-                             rateMutate, rateTransTemplate=generateRateTransTemplate(numsAllelesAtSites),
-                             numsAllelesAtSites=NULL,
-                             eUniqForEachG=FALSE, selectWithinHost=FALSE, timeStep=.1, 
-                             maxTime=1200, maxNTips=8000, expandTimeAfterMaxNTips=1.5,
-                             reportInterval=12,  ...) {
+simulateEpidemic <- function(
+  Ninit=Inf, nu=0, mu=1/850, pe, sde, pg.init, GEValues, 
+  rateContact, rateInfect, rateDie, rateSample, rateMutate, 
+  rateTransTemplate=generateRateTransTemplate(numsAllelesAtSites),
+  numsAllelesAtSites=NULL, eUniqForEachG=FALSE, selectWithinHost=FALSE, 
+  timeStep=.1, maxTime=1200, maxNTips=8000, expandTimeAfterMaxNTips=1.5,
+  reportInterval=12,  
+  ...) {
+  
   nGtps <- length(pg.init)
   nEnvs <- length(pe)
   
-  largs <- list(pe, sde, pg.init, GEValues, rateContact, rateInfect, rateDie, rateSample, 
+  largs <- list(pe, sde, pg.init, GEValues, 
+                rateContact, rateInfect, rateDie, rateSample, 
                 rateMutate, rateTransTemplate, numsAllelesAtSites, 
                 eUniqForEachG, selectWithinHost, timeStep)
-  names(largs) <- c('pe', 'sde', 'pg.init', 'GEValues', 'rateContact', 'rateInfect', 'rateDie', 'rateSample', 
-                    'rateMutate', 'rateTransTemplate', 'numsAllelesAtSites',
-                    'eUniqForEachG', ' selectWithinHost', 'timeStep')
+  names(largs) <- c(
+    'pe', 'sde', 'pg.init', 'GEValues', 'rateContact', 'rateInfect', 'rateDie', 
+    'rateSample', 'rateMutate', 'rateTransTemplate', 'numsAllelesAtSites',
+    'eUniqForEachG', ' selectWithinHost', 'timeStep')
   print('Simulating epidemic on:') 
   for(i in names(largs)) {
     cat(i, ':\n')
@@ -68,13 +75,14 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   }
   
   counts <- NULL
-  countNames <- c('time', 'Total',
-                  'N', 'X', 'Y', 'Z', 'nTips', 'D', 'meanActive', 'sdActive',
-                  'qActive0%', 'qActive2.5%', 'qActive25%', 'qActive50%', 'qActive75%', 'qActive97.5%', 'qActive100%', 
-                  'R2adj.A', 'rA.A', 'b.AtInfectionA','b.A', 
-                  'R2adj.S', 'rA.S', 'b.AtInfectionS','b.S',
-                  'R2adj', 'rA', 'b.AtInfection', 'b', 
-                  'nCouplesA', 'nCouplesS', 'nCouples')
+  countNames <- c(
+    'time', 'Total', 'N', 'X', 'Y', 'Z', 'nTips', 'D', 'meanActive', 'sdActive',
+    'qActive0%', 'qActive2.5%', 'qActive25%', 'qActive50%', 'qActive75%', 
+    'qActive97.5%', 'qActive100%', 
+    'R2adj.A', 'rA.A', 'b.AtInfectionA','b.A', 
+    'R2adj.S', 'rA.S', 'b.AtInfectionS','b.S',
+    'R2adj', 'rA', 'b.AtInfection', 'b', 
+    'nCouplesA', 'nCouplesS', 'nCouples')
   for(k in 1:nEnvs) {
     countNames <- c(countNames, paste0('Y', k, 1:nGtps))
   }
@@ -93,34 +101,38 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   
   while(!done) {  
     if(is.null(gen)|countActive==0) {
-      l <- stepContTimenxNorm(l$N, nu, mu, NULL, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
-                              rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, 
-                              rateSample=rateSample, 
-                              rateMutate=rateMutate, rateTransTemplate=rateTransTemplate, 
-                              eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost, 
-                              timeStep=timeStep, t=iter, fadingEpidemic=fadingEpidemic)
+      l <- stepContTimenxNorm(
+        l$N, nu, mu, NULL, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
+        rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, 
+        rateSample=rateSample, 
+        rateMutate=rateMutate, rateTransTemplate=rateTransTemplate, 
+        eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost, 
+        timeStep=timeStep, t=iter, fadingEpidemic=fadingEpidemic)
       if(l$hasNewInfections) {
         gen <- rbind(l$gen, l$genNew)
       } else {
         gen <- l$gen
       }
     } else {
-      l <- stepContTimenxNorm(l$N, nu, mu, gen, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
-                              rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
-                              rateMutate=rateMutate, rateTransTemplate=rateTransTemplate,
-                              eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost,
-                              edge=l$edge, edge.length=l$edge.length, nTips=l$nTips, timeStep=timeStep, t=iter, 
-                              fadingEpidemic=fadingEpidemic)
+      l <- stepContTimenxNorm(
+        l$N, nu, mu, gen, pe=pe, sde=sde, pg.init=pg.init, GEValues=GEValues, 
+        rateContact=rateContact, rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
+        rateMutate=rateMutate, rateTransTemplate=rateTransTemplate,
+        eUniqForEachG=eUniqForEachG, selectWithinHost=selectWithinHost,
+        edge=l$edge, edge.length=l$edge.length, nTips=l$nTips, timeStep=timeStep, t=iter, 
+        fadingEpidemic=fadingEpidemic)
+      
       if(l$hasNewInfections) {
         gen <- rbind(gen, l$genNew)
       }
     }
     
-    countActive <- nrow(gen[active==1])
+    countActive <- gen[, sum(active==1)]
     if(fadingEpidemic & countActive==0) {
       done=TRUE
     }
-    if(!fadingEpidemic & !expandingTime & (l$nTips>=maxNTips | iter*timeStep>maxTime/expandTimeAfterMaxNTips)) {
+    if(!fadingEpidemic & !expandingTime & 
+       (l$nTips>=maxNTips | iter*timeStep>maxTime/expandTimeAfterMaxNTips)) {
       timeEndGrowth <- iter*timeStep*expandTimeAfterMaxNTips
       expandingTime <- TRUE
       cat('Reached maxNTips, continuing growth unitl time', timeEndGrowth, '\n')
@@ -136,8 +148,9 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
     if((iter*timeStep)%%1==0) {
       epid <- list(gen=gen, timeStep=timeStep)
       cnt <- c(iter*timeStep, nrow(gen), 
-               l$N, l$N-nrow(gen[alive==1]), nrow(gen[active==1]), nrow(gen[alive==1&active==0]), l$nTips, 
-               nrow(gen[alive==0]), 
+               l$N, l$N- gen[, sum(alive==1)], gen[, sum(active==1)], 
+               gen[, sum(alive==1&active==0)], l$nTips, 
+               gen[, sum(alive==0)], 
                mean(l$zActive, na.rm=TRUE), sd(l$zActive, na.rm=TRUE), 
                quantile(l$zActive, probs=c(0, .025, .25, .5, .75, .975, 1), na.rm=TRUE), 
                
@@ -161,16 +174,25 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
                nrow(extractDRCouples(epidemic=epid, sampledOnly=FALSE, activeOnly=FALSE))
                )
       
-      for(k in 1:nEnvs) {
-        for(j in 1:nGtps) {
-          cnt <- c(cnt, nrow(gen[active==1&env==k&gene==j]))  
+      cnt <- c(cnt, gen[active == 1, {
+        accum <- matrix(as.integer(NA), nGtps, nEnvs)
+        for(k in 1:nEnvs) {
+          for(j in 1:nGtps) {
+            accum[j, k] <- sum(env == k & gene == j)
+          }
         }
-      }
-      for(k in 1:nEnvs) {
-        for(j in 1:nGtps) {
-          cnt <- c(cnt, nrow(gen[sampled==1&env==k&gene==j]))  
+        accum
+      }])
+      
+      cnt <- c(cnt, gen[sampled == 1, {
+        accum <- matrix(as.integer(NA), nGtps, nEnvs)
+        for(k in 1:nEnvs) {
+          for(j in 1:nGtps) {
+            accum[j, k] <- sum(env == k & gene == j)
+          }
         }
-      }
+        accum
+      }])
       
       if(is.null(counts)) {
         counts <- cnt
@@ -181,8 +203,10 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
       if((iter*timeStep)%%reportInterval==0) {
         cat('### Time: ', iter*timeStep, '\n')
         names(cnt) <- countNames
-        print(round(c(cnt[1:7], cnt[c('R2adj.A', 'R2adj.S', 'rA.A', 'rA.S')], 
-                cnt[-(1:32)]/as.vector(matrix(cnt[c('Y', 'Z')], nrow=(length(cnt)-32)/2, ncol=2, byrow=TRUE))), digits=2))
+        print(round(c(
+          cnt[1:7], cnt[c('R2adj.A', 'R2adj.S', 'rA.A', 'rA.S')],
+          gtpsDiv = sum(cnt[-(1:32)][1:((length(cnt)-32)/2)]!=0) /
+            ((length(cnt)-32)/2)), digits=2))
       }
     }
   }
@@ -190,8 +214,10 @@ simulateEpidemic <- function(Ninit=Inf, nu=0, mu=1/850,
   colnames(counts) <- countNames
   
   c(l[c('N', 'edge', 'edge.length', 'nTips')], 
-    list(gen=gen, time=timeStep*iterActive, timeFading=timeStep*iter, timeStep=timeStep, rateContact=rateContact, 
-         rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, rateMutate=rateMutate, eUniqForEachG=eUniqForEachG, 
+    list(gen=gen, time=timeStep*iterActive, timeFading=timeStep*iter, 
+         timeStep=timeStep, rateContact=rateContact, 
+         rateInfect=rateInfect, rateDie=rateDie, rateSample=rateSample, 
+         rateMutate=rateMutate, eUniqForEachG=eUniqForEachG, 
          selectWithinHost=selectWithinHost, counts=counts,...))
 }
 
@@ -233,6 +259,9 @@ normReactMat <- function(genotypeXenv, GE) {
 #' the argument idTips is used to identify which individuals to be included in the phylogeny. 
 #' This is useful if, for example, one has searched all individuals who were sampled during 
 #' a specified time interval of the epidemic.
+#' 
+#' @import ape
+#' 
 #' @export
 extractTree <- function(epidemic, tips=NULL, idTips=NULL, collapse.singles=TRUE) {
   gen <- copy(epidemic$gen)
@@ -303,6 +332,9 @@ extractTree <- function(epidemic, tips=NULL, idTips=NULL, collapse.singles=TRUE)
 #' This filter is applied after the previous filters.
 #' 
 #' @return a data.table representing a subset of epidemic$gen after applying the filters
+#' 
+#' @import data.table
+#' 
 #' @export
 extractPop <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, firstN=Inf, lastN=Inf) {
   pop <- if(is.null(epidemic)) {
@@ -338,21 +370,6 @@ extractPop <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FALSE, t
       }
       subset
     }]
-    
-#     pop <- epidemic$gen[sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & active>=ifelse(activeOnly, 1, 0), ]
-#     if(copy) {
-#       pop <- copy(pop)
-#     }
-#     if(sampledOnly) {
-#       pop[, timeObs:=(tinf+tau)*epidemic$timeStep]
-#     } else {
-#       pop[, timeObs:=tinf*epidemic$timeStep]
-#     }
-#     pop <- pop[timeObs>=tMin&timeObs<=tMax]
-#     if(lastN<nrow(pop)) {
-#       pop <- pop[(nrow(pop)-lastN+1):nrow(pop)]
-#     }
-#     pop
   }
 }
 
@@ -386,6 +403,8 @@ extractPop <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FALSE, t
 #' eD: special environmental effect in the donor at the moment of sampling
 #' gD: strain in the donor at the moment of sampling
 #' 
+#' @import data.table
+#' 
 #' @export
 extractDRCouples <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, firstN=Inf, lastN=Inf) {
   if(is.null(epidemic)) {
@@ -405,8 +424,10 @@ extractDRCouples <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FA
         subset <- rep(TRUE, length(id))
       }
       
-      subset <- (subset & sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & active>=ifelse(activeOnly, 1, 0) &
-                   timeObs*epidemic$timeStep >= tMin & timeObs*epidemic$timeStep <= tMax)
+      subset <- (subset & sampled >= ifelse(sampledOnly, 1, 0) & sampled<=1 & 
+                   active>=ifelse(activeOnly, 1, 0) &
+                   timeObs*epidemic$timeStep >= tMin & 
+                   timeObs*epidemic$timeStep <= tMax)
       
       N <- sum(subset)
       if(firstN < N) {
@@ -459,6 +480,9 @@ extractDRCouples <- function(epidemic, ids=NULL, sampledOnly=TRUE, activeOnly=FA
 #' @param data a data.table returned by extractPop
 #' @param GEValues a matrix of GEValues
 #' @param copy logical indicating whether a copy of the original data.table should be returned (TRUE by default)
+#' 
+#' @import data.table
+#' 
 #' @export
 decomposeTrait <- function(data, GEValues, copy=TRUE) {
   if(copy) {
@@ -488,182 +512,15 @@ decomposeTrait <- function(data, GEValues, copy=TRUE) {
 
 
 #' Variance decomposition of trait values 
+#' 
+#' @import data.table
 #'@export
 decomposeVar <- function(data) {
     data[, c(varz=var(z), varG=var(G), varE=var(E), varI=var(I), varEpsilon=var(epsilon), covGE=cov(G,E))]
 }
 
-#' Regression slope of recipient on donor values in an epidemic
-#' @param sampledOnly logical, indicating if only sampled individuals should be included in the heritability calculation
-#' @param tMin,tMax numeric, time interval for which to measure the heritability. if sampledOnly is TRUE this would be 
-#'    the times of sampling for the individuals; otherwise, this would be the times of infection. 
-#' @param corr logical, should donor-recipient correlation be returned instead of regression slope
-#' @export
-b <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
-                      firstN=Inf, lastN=Inf, atInfection=FALSE, report=FALSE, corr=FALSE) {
-  if(is.null(epidemic)&is.null(data)) {
-    warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')
-    NA
-  } else if(!is.null(data)) {
-    couples <- data
-  } else {
-    couples <- extractDRCouples(epidemic=epidemic, 
-                                sampledOnly=sampledOnly, activeOnly=activeOnly, 
-                                tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
-  }
-  
-  if(nrow(couples) > 0) {
-    couples[, GED0:=GEValues[cbind(envd, gD0)]]
-    couples[, GER0:=GEValues[cbind(env, gD)]]
-    couples[, zD0:=calcValue(envd, gD0, eD0, GEValues)] 
-    couples[, zR0:=calcValue(env, gR0, eR0, GEValues)]
-    
-    couples[, GED:=GEValues[cbind(envd, gD)]]
-    couples[, GER:=GEValues[cbind(env, gR)]]
-    couples[, zD:=calcValue(envd, gD, eD, GEValues)]
-    couples[, zR:=calcValue(env, gR, eR, GEValues)]
-    
-    beta0=couples[, cov(zD0, zR0)/var(zD0)]
-    beta=couples[, cov(zD, zR)/var(zD)]  
-    
-    cor0=couples[, cor(zD0, zR0)]
-    cor=couples[, cor(zD, zR)]
-    
-    if(report) {
-      list(beta0, beta=beta, cor=cor, cor0=cor0, couples=couples)
-    } else {
-      if(atInfection) {
-        ifelse(corr, cor0, beta0)
-      } else {
-        ifelse(corr, cor, beta)
-      }
-    }
-  } else {
-    NA
-  }           
-}
 
-
-#' Estimating intraclass correlation (ICC) through ANOVA
-#' @param epidemic a list of objects returned from simulateEpidemic
-#' @param data NULL or a data.table such as the element gen in an epidemic list
-#' @param GEValues genotype-environment trait values for calculating the z-values; if NULL it is assumed that the 
-#' z-values are already in data, or epidemic$gen.
-#' @param sampledOnly,activeOnly,tMin,tMax,firstN,lastN parameters passed to extractPop
-#' @param by a character string which can be evaluated as expression in the by clause of data.table
-#' the times of sampling for the individuals; otherwise, this would be the times of infection.
-#' @param report a logical indicating what result should be returned. If FALSE, only the ICC value is returned, 
-#' otherwise a list of statistics from the ANOVA calculation
-#' @return See report parameter
-#' @export
-rA <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf,
-                       firstN=Inf, lastN=Inf, by=list('gene'), report=FALSE) {
-  if(is.null(epidemic)&is.null(data)) {
-    warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')
-    NA
-  } else if(!is.null(data)) {
-    pop <- data
-  } else {
-    pop <- extractPop(epidemic=epidemic, 
-                      sampledOnly=sampledOnly, activeOnly=activeOnly, 
-                      tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
-  }
-  if(nrow(pop)>0) {
-    if(!is.null(GEValues)) {
-      pop[, z:=calcValue(env, gene, e, GEValues)]
-    }
-    
-    # numbers of indivs in groups
-    nums <- pop[, list(ni=length(z)), by=eval(parse(text=by))]
-    
-    # total number of individuals
-    N <- nums[, sum(ni)]
-    
-    #number of groups
-    K <- nrow(nums)
-    
-    # weighted mean number of individuals in each group
-    n0 <- nums[, (N-sum(ni^2/N))/(K-1)]
-    
-    # grand mean
-    zBar <- pop[, mean(z)]
-    
-    # Total sum of squares
-    SSt <- pop[, sum((z-zBar)^2)]
-    
-    # gruop means assigned to each row to facilitate sums of squares
-    pop[, zBari:=mean(z), by=eval(parse(text=by))]
-    
-    # sum of squares between groups
-    SSb <- pop[, sum((zBari-zBar)^2)]
-    
-    # sum of squares within groups
-    SSe <- pop[, sum((z-zBari)^2)]
-    
-    # mean square between
-    MSb <- SSb/(K-1)
-    # mean square within
-    MSe <- SSe/(N-K)
-    
-    sigma2G <- (MSb-MSe)/n0
-    sigma2E <- MSe
-    
-    # F-statistics and 95% CI
-    F <- MSb/MSe
-    Fu <- qf(0.975, df1=K-1, df2=N-K)
-    Fl <- 1/qf(0.975, df1=N-K, df2=K-1)
-    CI95upper <- (F/Fl-1)/(F/Fl+n0-1)
-    CI95lower <- (F/Fu-1)/(F/Fu+n0-1)
-    
-    if(report) {
-      list(H2aov=sigma2G/(sigma2G+sigma2E), pop=pop, N=N, K=K, nums=nums, SSt=SSt, SSb=SSb, SSe=SSe, MSb=MSb, MSe=MSe, n0=n0, 
-           F=F, Fu=Fu, Fl=Fl, CI95upper=CI95upper, CI95lower=CI95lower, sigma2G=sigma2G, sigma2E=sigma2E)
-    } else {
-      sigma2G/(sigma2G+sigma2E)
-    }
-  } else {
-    NA
-  }
-  
-}
-
-
-#' Broad-sense heritability of a pathogen trait
-#' @param epidemic a list of objects returned from simulateEpidemic
-#' @param data NULL or a data.table such as the element gen in an epidemic list
-#' @param GEValues genotype-environment trait values for calculating the z-values; if NULL it is assumed that the 
-#' z-values are already in data, or epidemic$gen.
-#' @param sampledOnly,activeOnly,tMin,tMax,firstN,lastN parameters passed to extractPop
-#' @return numeric indicating the estimated heritability for infected individuals in the population. 
-#'  
-#' @export
-R2adj <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
-                    firstN=Inf, lastN=Inf) {
-  if(is.null(epidemic)&is.null(data)) {
-    warning('One of the parameters epidemic or data should be specified, but both were NULL. Returning NA.')
-    NA
-  } else if(!is.null(data)) {
-    pop <- data
-  } else {
-    pop <- extractPop(epidemic=epidemic, 
-                      sampledOnly=sampledOnly, activeOnly=activeOnly, 
-                      tMin=tMin, tMax=tMax, firstN=firstN, lastN=lastN)
-  }
-  if(nrow(pop)>0) {
-    if(!is.null(GEValues)) {
-      pop[, z:=calcValue(env, gene, e, GEValues)]
-    }
-    if(pop[, length(unique(gene))>=2]) {
-      pop[, summary(lm(z~as.factor(gene)))$adj.r.squared]
-    } else {
-      0
-    }
-  } else {
-    NA
-  }
-}
-
-
+#' @import data.table
 #' @export
 estimMean <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
   if(is.null(epidemic)) {
@@ -688,6 +545,7 @@ estimMean <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tM
   }
 }
 
+#' @import data.table
 #' @export
 estimSD <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
   if(is.null(epidemic)) {
@@ -712,6 +570,7 @@ estimSD <- function(epidemic, GEValues, sampledOnly=TRUE, activeOnly=FALSE, tMin
   }
 }
 
+#' @import data.table
 #' @export
 estimQuantile <- function(epidemic, GEValues, prob=.5, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, lastN=Inf) {
   if(is.null(epidemic)) {
@@ -742,6 +601,7 @@ estimQuantile <- function(epidemic, GEValues, prob=.5, sampledOnly=TRUE, activeO
 # N : number of individuals
 # nGtps : number of alleles 
 # sde : a numeric or a numeric matrix, sde[env, g]: standard dev of the special env. effect for <env, g>
+#' @import data.table
 newgennxNorm <- function(pe, sde, pg.init, N, eUniqForEachG=FALSE) {
   nGtps <- length(pg.init)
   if(length(sde)==1) {
@@ -757,6 +617,8 @@ newgennxNorm <- function(pe, sde, pg.init, N, eUniqForEachG=FALSE) {
   }
 }
 
+#' @import data.table
+#' @useDynLib patherit
 sampleEvent <- function(rates, timeStep) {
   # total rate at which an event occurs during this timeStep
   lambdas <- rowSums(rates)
@@ -766,20 +628,27 @@ sampleEvent <- function(rates, timeStep) {
  
   # set intervals of propbabilities for no-event, sampling, dieing, transmitting and mutating to each other strain
   probs <- cbind(probs0, rates/lambdas*(1-probs0))
-  for(i in 2:ncol(probs)) {
-    probs[, i] <- probs[, i-1]+probs[, i]
-  }
+  
+  # for(i in 2:ncol(probs)) {
+  #  probs[, i] <- probs[, i-1]+probs[, i]
+  # }
+  # a faster C++ version of the above:
+  cumulativeRows(probs)
   
   random <- runif(nrow(rates))
-  probs_random <- (probs-random)>=0
+  probs_random <- (probs-random) >= 0
   
   events <- rep(0, nrow(rates))
-  for(e in ncol(probs_random):1) {
-    events[probs_random[, e]] <- e-1
-  }
+  # for(e in ncol(probs_random):1) {
+  #   events[probs_random[, e]] <- e-1
+  # }
+  # a faster C++ version of the above:
+  decideEvents(events, probs_random)
+  
   events
 }
 
+#' @import data.table
 infectnxNorm <- function(gen, pe, sde, pg.init, donors, eUniqForEachG=FALSE) {
   nGtps <- length(pg.init)
   nNew <- sum(donors)
@@ -793,6 +662,7 @@ infectnxNorm <- function(gen, pe, sde, pg.init, donors, eUniqForEachG=FALSE) {
   }
 }
 
+#' @import data.table
 #' @export
 eSpec <- function(e, gene) {
   if(is.list(e)) {
@@ -819,6 +689,7 @@ eSpec <- function(e, gene) {
 #' @param e numeric vector containing the special environmental effects for each individual
 #' @param GEValues matrix containing the genotype by environment expected phenotypic values
 #' @return  vector of phenotypic values
+#' @import data.table
 #' @export
 calcValue <- function(env, gene, e, GEValues) {
   GEValues[cbind(env, gene)] + eSpec(e, gene)
@@ -828,7 +699,7 @@ calcValue <- function(env, gene, e, GEValues) {
 #' 
 #' @param numsAllelesAtSites integer vector specifying the number of alleles at each site, 
 #' the length of the vector defining the number of QTLs.
-#' 
+#' @import data.table
 #' @export
 generateGenotypes <- function(numsAllelesAtSites) {
   if(length(numsAllelesAtSites)==0) {
@@ -838,7 +709,7 @@ generateGenotypes <- function(numsAllelesAtSites) {
     stop("numsAllelesAtSites should be an integer vector of numbers of alleles bigger than 1.")
   }
   
-  genotypes <- as.matrix(expand.grid(sapply(rev(numsAllelesAtSites), 
+  genotypes <- as.matrix(expand.grid(lapply(rev(numsAllelesAtSites), 
                                             function(all) 1:all))[, length(numsAllelesAtSites):1])
   
   
@@ -864,6 +735,9 @@ generateGenotypes <- function(numsAllelesAtSites) {
 #' (see function simulateEpidemic in the patherit package). This multiplier is nonzero only for transitions
 #' that need exactly one mutation (haming distance = 1) in order to convert one genotype into another.
 #' The 
+#' 
+#' @import data.table
+#' 
 #' @export
 generateRateTransTemplate <- function(numsAllelesAtSites, nameRows=FALSE) {
   genotypes <- generateGenotypes(numsAllelesAtSites)
@@ -885,8 +759,10 @@ generateRateTransTemplate <- function(numsAllelesAtSites, nameRows=FALSE) {
   transTemplate
 }
 
+#' @import data.table
 # state-transition rates
-rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, rateTransTemplate, selectWithinHost) {
+rateStateTransition <- function(
+  z, rates, eMatrix, es, envs, genes, GEValues, rateTransTemplate, selectWithinHost) {
   if(selectWithinHost) {
     gtps <- seq_len(ncol(eMatrix))
     gtpsMatrix <- matrix(gtps, nrow=nrow(eMatrix), ncol=ncol(eMatrix), byrow=TRUE)
@@ -904,9 +780,9 @@ rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, ra
       as.double(GEValues[cbind(envs, gother[, i])] + envsother[, i] > z)  
     })
     
-    matrix(sgnother*rateTransTemplate[genes, ]*rates, nrow=length(z))
+    matrix(sgnother * rateTransTemplate[genes, ] * rates, nrow = length(z))
   } else {
-    matrix(rateTransTemplate[genes, ]*rates, nrow=length(z))
+    matrix(rateTransTemplate[genes, ] * rates, nrow = length(z))
   }
 }
 
@@ -933,6 +809,7 @@ rateStateTransition <- function(z, rates, eMatrix, es, envs, genes, GEValues, ra
 # eUniqForEachG
 # selectWithinHost
 # fadingEpidemic
+#' @import data.table
 stepContTimenxNorm <- function(N=Inf, nu=0, mu,
                                gen=NULL, pe, sde, pg.init, GEValues, rateContact, rateInfect, rateDie, rateSample, 
                                rateMutate, rateTransTemplate, 
@@ -972,7 +849,7 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
   } 
   
   # number of susceptible individuals
-  X <- N-nrow(gen[alive==1])
+  X <- N - gen[, sum(alive==1)]
   
   # let some of the alive and recovered (sampled) individuals die of natural death
   # number of recovered individuals still alive
@@ -1001,12 +878,15 @@ stepContTimenxNorm <- function(N=Inf, nu=0, mu,
   gen[isActive, tauP:=tauP+1]
   
   # sample events that happen at this timeStep for some of the actives
-  envs <- gen[isActive, env]
-  genes <- gen[isActive, gene]
+  envs <- gen[isActive, env] # host immune system types
+  genes <- gen[isActive, gene] # viral genotypes
   
-  eMatrix <- gen[isActive, do.call(rbind, e)]
+  # host-specific effects for each viral genotype
+  eMatrix <- gen[isActive, do.call(rbind, e)] 
+  # host-specific effects for current viral genotypes
   es <- gen[isActive, eSpec(eMatrix, gene)]
   
+  # current phenotypic values
   zs <- GEValues[cbind(envs, genes)]+es
   
   ratesSample <- rep(rateSample, length(zs))

@@ -45,21 +45,30 @@ set.seed(1)
 # Number of tips
 N <- 2000
 # true parameters
-alpha <- 1
-theta <- 4.5
-sigma <- 2
-sigmae <- 2
+alpha <- 12
+theta <- 4
+sigma <- 4
+sigmae <- 1
 
 tree <- rtree(N)
-tree$edge.length <- tree$edge.length/10
+tree$edge.length <- tree$edge.length/40
 
-g <- generateTraitOU(tree, g0=6, alpha=alpha, theta=theta, sigma=sigma)
+g <- generateTraitOU(tree, g0=5, alpha=alpha, theta=theta, sigma=sigma)
 z <- rnorm(N, mean=0, sd=sigmae)+g[1:N]
+
+sigma^2/(2*alpha)/(sigma^2/(2*alpha)+sigmae^2)
+var(g)/var(z)
+
+tMax <- max(nodeTimes(tree, tipsOnly=TRUE))
+tMean <- mean(nodeTimes(tree, tipsOnly=TRUE))
+H2.poumm(alpha, sigma, sigmae, tMax)
+H2.poumm(alpha, sigma, sigmae, tMean)
+
 ```
 
 # Plot the phenotype along the tree
 ```{r plottreedata, fig.width=4, fig.height=3}
-boxplotTraitAlongTree(z, tree, xlim=c(0, 1.8), boxwex=0.05, nGroups=10)
+boxplotTraitAlongTree(z, tree, boxwex=0.02, nGroups=10, xlim=c(0, .5))
 ```
 
 # Running a POUMM analysis
@@ -71,6 +80,102 @@ boxplotTraitAlongTree(z, tree, xlim=c(0, 1.8), boxwex=0.05, nGroups=10)
 pruneInfo <- pruneTree(tree)
 #likelihood at the true value
 lik <- lik.poumm(z, tree, alpha, theta, sigma, sigmae, log=T, distgr='maxlik', pruneInfo=pruneInfo)
+```
+
+```{r fit-uk}
+load('../../spvl/DATA/Real/Hodcroft_2014/ukdata.RData')
+ukdata
+treeUK <- ukdata$tree[[8]]
+zUK <- ukdata$v[[8]]
+
+fitUK <- POUMM(z=zUK, tree=treeUK, distgr='maxlik', usempfr=0, doML=TRUE, doMCMC=TRUE, n.chains=3, n.mcmc=1e6, n.adapt=1e5, verbose=TRUE)
+
+summary.fitUK <- summary(fitUK, thin=1000, mode='short')
+
+system.time(anPPUK <- PP(z=zUK, tree=treeUK, bootstraps=1000))
+```
+## Performing an ML and a MCMC fit 
+```{r fit, echo=TRUE, cache=TRUE}
+library(doParallel)
+cl <- makeCluster(4)
+registerDoParallel(cl)
+
+fitML <- POUMM(z=z, tree=tree, distgr=mean(z), usempfr=1, doML=TRUE, 
+               parFixed=c(sigmae=0), 
+               doMCMC=FALSE, n.chains=3, n.mcmc=6e5, n.adapt=1e5, verbose=TRUE)
+
+for(th in -20:20)
+  print(-lik.poumm(z, tree, fitML$ML$par[1], th,  #fitML$ML$par[2], 
+                  fitML$ML$par[3], fitML$ML$par[4], distgr='maxlik', usempfr=1))
+
+summary(fitML, mode='short')
+
+# test with the Rphylopars package
+library(Rphylopars)
+fit.phylopars <- phylopars(data.table(species=tree$tip.label, z=z), tree, model='OU', pheno_error=FALSE, REML=FALSE)
+
+
+
+fit <- POUMM(z=z, tree=tree, distgr='maxlik', usempfr=0, doML=TRUE, doMCMC=TRUE, n.chains=3, n.mcmc=6e5, n.adapt=1e5, verbose=TRUE)
+
+
+summary.fit <- summary(fit, thin=100, mode='short')
+
+system.time(anPP <- PP(z=z, tree=tree, bootstraps=1000))
+
+df <- summary.fit[stat%in%c('sigmae', 'sigmaGtMean'), data.table(sigmae=unclass(mcmc[[1]][,1]), sigmaGtMean=unclass(mcmc[[2]][,1]))]
+
+commonTheme = list(labs(color="Density",fill="Density",
+                        x=expression(sigmae),
+                        y=expression(sigmaGtMean)),
+                   theme_bw(),
+                   theme(legend.position=c(0,1),
+                         legend.justification=c(0,1)))
+
+ggplot(data=df,aes(sigmae,sigmaGtMean)) + 
+  stat_density2d(aes(fill=..level..,alpha=..level..),geom='polygon',colour='black') + 
+  scale_fill_continuous(low="green",high="red") +
+  geom_smooth(method=lm,linetype=2,colour="red",se=F) + 
+  guides(alpha="none") + commonTheme
+
+
+
+  geom_point() + commonTheme
+
+dt <- summary.fit$MCMC
+
+
+
+
+
+dcast(dt, stat~chain, 
+      fun=list(function(ESS) sum(unlist(ESS)), 
+               function(lModes) {if(length(lModes)>=1) lModes[[which.max(sapply(lModes, function(m) attr(m, 'logpost')))]] else NULL}, 
+               function(lHPDs) if(length(lHPDs)>=1) colMeans(do.call(rbind, lHPDs)) else NULL, 
+               function(lHPDs) if(length(lHPDs)>=1) colMeans(do.call(rbind, lHPDs)) else NULL,
+               function(mcs) if(length(mcs)>=1) mcmc(do.call(rbind, mcs), thin=thin(mcs)) else NULL),
+      value.var=list('ESS', 'Mode', 'HPD', 'HPD50', 'mcs'))
+
+print(summary.fit$ML)
+print(summary.fit$MCMC)
+
+merge(summary.fit$ML, dcast(summary.fit$MCMC, stat~chain, sep='.MCMC_', subset=.(chain!=1), value.var=c('ESS', 'Mode', 'HPD', 'HPD50', 'mcs', 'samplePrior')), by='stat', all=TRUE)
+
+fit.PMM <- PMM(z=z, tree=tree, distgr='maxlik', usempfr=0, doML=TRUE, doMCMC=TRUE, n.mcmc=2e5, n.chains=3, verbose=TRUE)
+
+summary.fit.PMM <- summary(fit.PMM, start=5e4)
+
+print(summary.fit.PMM$ML)
+print(summary.fit.PMM$MCMC)
+
+dt <- summary(fit.PMM, start=5e4, merge.ML.MCMC=FALSE, dcast.MCMC=FALSE)$MCMC
+dt[, Mode[[2]]]
+dcast(dt, stat~samplePrior, 
+      fun=list(sum, function(lModes) lModes[[which.max(sapply(lModes, function(m) attr(m, 'logpost')))]], 
+               function(lHPDs) colMeans(do.call(rbind, lHPDs)), 
+               function(lHPDs) colMeans(do.call(rbind, lHPDs)),
+               function(mcs) mcmc(do.call(rbind, mcs), thin=thin(mcs))),
+      value.var=list('ESS', 'Mode', 'HPD', 'HPD50', 'mcs'))
 ```
 
 ## Performing an ML-fit

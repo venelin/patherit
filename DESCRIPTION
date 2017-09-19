@@ -1,23 +1,37 @@
 Type: Package
 Package: patherit
 Title: Pathogen Trait Heritability
-Version: 0.4
-Date: 2016-07-20
+Version: 0.8
+Date: 2017-09-19
 Author: Venelin Mitov
-Maintainer: <venelin.mitov@bsse.ethz.ch>
-Description: Methods for estimating the heritability of pathogen traits.
-    Currently, this package includes maximum likelihood and bayesian inference
-    of the phylogenetic Ornstein-Uhlenbeck mixed model (POUMM) as well as ANOVA
-    and donor-recipient regression estimators. In addition, this package provides
-    functions to simulate the chain of transmission events emerging during
-    an epidemic outbreak together with the within host evolution of several
-    quantitative trait loci in the pathgogen genome associated with a pathogen
-    trait.
-License: GPL (>=2.0)
-Depends:
+Maintainer: <vmitov@gmail.com>
+Description: This package provides methods for simulating the evolution and for
+  estimating the heritability of pathogen traits. The simulation method assumes
+  a classical additive model for trait in which the trait-value is formed as a 
+  sum of single-locus and epistatic effects from the pathogen genotype, the host
+  immune system type and a white noise term representing the combination of 
+  unknown non-heritable factors such as unknown pathogen and host immune system
+  loci, host environment and measurement error. It is assumed that the genotype
+  of the pathogen can mutate during an infection as a result of neutral genetic
+  drift or within-host selection for an optimal trait-value. At the between-host
+  level various events, such as transmission to susceptible hosts, diagnosis and
+  immunity are simulated according to a Susceptible-Infected-Recovered (SIR) 
+  epidemiological model. The rates at which these events occur as well as contact
+  rates between infected and susceptible hosts can be specified as constants or
+  as functions of the pathogen trait. The resulting epidemic is represented as
+  a data.table and a rooted phylogenetic tree (a phylo object). The data 
+  contains the history of within- and between- host events. The package provides
+  plotting functions to visualize the epidemic over time, and to validate various 
+  methods for analysing the evolution of the trait, estimating the trait 
+  heritability and performing genome wide association studies (GWAS).
+License: GPL (>=3.0)
+Depends: R (>= 3.1.0), Rcpp
+LinkingTo: Rcpp
+Imports:
     ape,
     data.table,
-    adaptMCMC,
-    coda,
-    boot
+    boot,
+    ggplot2,
+    POUMM
 RoxygenNote: 5.0.1
+NeedsCompilation: yes

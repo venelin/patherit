@@ -2,64 +2,6 @@
 
 NULL
 
-#' Extract information for pruning a tree used as cache in poumm likelihood calculation
-#' 
-#' @param tree a phylo object
-#' 
-#' @details This method should only be called if calculating poumm likelihood with impl='R5'.
-#' @return a list of objects
-#' 
-#' @export
-pruneTree <- function(tree) {
-  N <- length(tree$tip.label)                # number of tips
-  M <- length(unique(as.vector(tree$edge)))  # number of all nodes 
-  endingAt <- order(rbind(tree$edge, c(0, N+1))[, 2])
-  
-  edge <- tree$edge
-  
-  nonVisitedChildren <- rep(0, M)
-  ee1 <- edge[, 1]
-  while(length(ee1)) {
-    matchp <- match((N+1):M, ee1)
-    matchp <- matchp[!is.na(matchp)]
-    nonVisitedChildren[ee1[matchp]] <- nonVisitedChildren[ee1[matchp]] + 1
-    ee1 <- ee1[-matchp]
-  }
-  
-  # start from the edges leading to tips
-  nodesVector <- c()
-  nodesIndex <- c(0)
-  
-  unVector <- c()
-  unIndex <- c(0)
-  
-  nodes <- 1:N
-  
-  while(nodes[1] != N+1) {
-    nodesIndex <- c(nodesIndex, nodesIndex[length(nodesIndex)]+length(nodes))
-    nodesVector <- c(nodesVector, nodes)
-    
-    es <- endingAt[nodes]
-    nodes <- c()
-    edgeEnds <- edge[es, 2]
-    
-    #update parent pifs
-    while(length(es)>0) {
-      un <- match(unique(edge[es, 1]), edge[es, 1])
-      unIndex <- c(unIndex, unIndex[length(unIndex)]+length(un))
-      unVector <- c(unVector, un)
-      #pif[edge[es[un], 1], ] <- pif[edge[es[un], 1], ] + pif[edge[es[un], 2], ]
-      nonVisitedChildren[edge[es[un], 1]] <- nonVisitedChildren[edge[es[un], 1]] - 1
-      nodes <- c(nodes, edge[es[un][nonVisitedChildren[edge[es[un], 1]] == 0], 1])
-      es <- es[-un]
-    }
-  }
-  list(M=M, endingAt=endingAt, 
-       nodesVector=nodesVector, nodesIndex=nodesIndex, nLevels=length(nodesIndex)-1, 
-       unVector=unVector, unIndex=unIndex)
-}
-
-
 #' Node indices of the direct descendants of n in the phylogeny tree.
 #' 
 #' @param tree an object of class phylo
@@ -89,7 +31,7 @@ edgesFrom <- function(tree, n) {
 #'   a vector of size the number of nodes in the tree (tips, root, internal)
 #'   containing the time from the root to the corresponding node in the tree
 #' @export
-nodeTimes <- function(tree) {
+nodeTimes <- function(tree, tipsOnly=FALSE) {
   rtree <- reorder(tree, 'postorder')
   es <- rtree$edge[dim(rtree$edge)[1]:1, ]
   nEdges <- dim(es)[1]
@@ -97,8 +39,199 @@ nodeTimes <- function(tree) {
   nodeTimes <- rep(0, length(rtree$tip.label)+rtree$Nnode)
   for(e in 1:nEdges) 
     nodeTimes[es[e, 2]] <- nodeTimes[es[e, 1]]+ts[e]
-  nodeTimes
+  if(tipsOnly) {
+    nodeTimes[1:length(tree$tip.label)]
+  } else {
+    nodeTimes
+  }
 }
+
+
+# bijection NxN->N
+cantorPairingNumber <- function(a, b, ordered=TRUE) {
+  a <- as.integer(a)
+  b <- as.integer(b)
+  if(!ordered) {
+    c <- a
+    c[a>b] <- b[a>b]
+    b[a>b] <- a[a>b]
+    a <- c
+  }
+  ((a+b)*(a+b+1)/2+b)
+}
+
+
+#' Extract tip pairs from a phylogeny.
+#' @param tree a phylo object
+#' @return a data.table with four columns:
+#' i, j : integers - the members of each tip-pair. For each entry (i,j) a 
+#' symmetric entry (j,i) is present; to obtain the corresponding tip labels in 
+#' the tree use tree$tip.label[i] and tree$tip.label[j] respectively.
+#' tau: the phylogenetic distance between i and j
+#' idPair: the unique identifier of each pair.
+#' 
+#' @import data.table
+#' @importFrom ape dist.nodes
+#' @export
+extractTipPairs <- function(tree=NULL, tipDists=NULL, vcvMat=NULL, z=NULL) {
+  if(!is.null(tipDists)) {
+    if(ncol(tipDists)!=nrow(tipDists)) {
+      stop('tipDists is not a square matrix.')
+    }
+    N <- nrow(tipDists)
+    names <- rownames(tipDists)
+    if(is.null(tree)) {
+      if(is.null(vcvMat)) {
+        # assuming ultrametric tree of length max(tipDists)/2
+        vcvMat <- max(tipDists)/2-tipDists/2
+      }
+    } else {
+      if(is.null(vcvMat)) {
+        vcvMat <- vcv(tree)
+      }
+    }
+  } else {
+    if(is.null(tree)) {
+      stop('Parameter tree has to be specified in case of NULL tipDists.')
+    }
+    N <- length(tree$tip.label) 
+    names <- tree$tip.label
+    if(is.null(vcvMat)) {
+      vcvMat=vcv(tree)
+    }
+  }
+  
+  ttips <- diag(vcvMat)
+  pairs <- as.data.table(do.call(rbind, lapply(1:N, function(i) {
+    vcvMati <- vcvMat[, i]
+    if(is.null(tipDists)) {
+      tipDistsi <- ttips[i]+ttips-2*vcvMati
+    } else {
+      tipDistsi <- tipDists[i, ]
+    }
+    
+    tipDistsi[i] <- Inf  
+    j <- which.min(tipDistsi)[1]; 
+    cbind(i, (1:N)[-i], tipDistsi[-i], vcvMati[-i])
+  })))
+  
+  setnames(pairs, c('i', 'j', 'tau', 't'))
+  pairs[, idPair:=cantorPairingNumber(i, j, ordered=FALSE)]
+  
+  if(!is.null(z)) {
+    if(length(z)!=N) {
+      stop('the size of z is different from the number of tips.')
+    }
+    pairs[, z:=z[i]]
+    pairs[, deltaz:=abs(z[1]-z[2]), by=idPair]
+  }
+  
+  pairs[order(idPair)]
+}
+
+#' Extract phylogenetic pairs from a phylogeny, i.e. mutually closest pairs from
+#' a distance matrix.
+#' @param tree a phylo object; Can be left NULL, in which case the tipDists 
+#' matrix should be specified;
+#' @param tipDists a N by N numeric matrix containing the tip-distances in the 
+#' tree; can be NULL, in which case it is going to be calculated; if specified, 
+#' the tree-parameter will only be used for calculation of vcvMat and no 
+#' validation of tip-distances in the tree with the tipDists matrix will be done.
+#' @param vcvMat a N by N matrix where N is the number of tips in the tree. 
+#' The diagonal elements of this matrix represent the root-tip distances; 
+#' the off-diagonal elements represent the distance from the root to the most 
+#' recent common ancestor of each couple of tips. This matrix is calculated by 
+#' the vcv function from the ape package. If tree is specified, the matrix can 
+#' be specified only for the sake of saving calculation time when a call to vcv 
+#' has already been executed on the tree; If the tree is not specified (i.e. a 
+#' tipDists-matrix is given), then it is assumed that the tree is ultrametric 
+#' with length equal to t=max(tipDists)/2 and vcvMat[i,j] is calculated as 
+#' vcvMat[i,j]=t-tipDists[i,j]/2.
+#' @param z (optional, defaults to NULL) a numeric vector with phenotypes 
+#' corresponding to the tips in tree or the row numbers in tipDists. 
+#' @return a data.table with five columns:
+#' i, j : integers - the members of each phylogenetic pair. For each entry (i,j) 
+#' a symmetric entry (j,i) is present; to obtain the corresponding tip labels in 
+#' the tree use tree$tip.label[i] and tree$tip.label[j] respectively.
+#' tau: the phylogenetic distance between i and j
+#' t: the root-tip distance of the mrca of i and j
+#' idPair: the unique identifier of each pair
+#' z: the value corresponding to each i 
+#' (this column doesn't exist if no parameter z is specified)
+#' deltaz: the absolute phenotypic distance between members of a pair 
+#' (this column doesn't exist if no parameter z is specified)
+#' 
+#' @details Phylogenetic pairs represent pairs of tips each of which is the 
+#' other's nearest neighbor-tip in the phylogenty according to patristic 
+#' (phylogenetic distance)
+#' @importFrom ape vcv
+#' @import data.table
+#' @export
+extractPP <- function(tree=NULL, tipDists=NULL, vcvMat=NULL, z=NULL) {
+  if(!is.null(tipDists)) {
+    if(ncol(tipDists)!=nrow(tipDists)) {
+      stop('tipDists is not a square matrix.')
+    }
+    N <- nrow(tipDists)
+    names <- rownames(tipDists)
+    if(is.null(tree)) {
+      if(is.null(vcvMat)) {
+        # assuming ultrametric tree of length max(tipDists)/2
+        vcvMat <- max(tipDists)/2-tipDists/2
+      }
+    } else {
+      if(is.null(vcvMat)) {
+        vcvMat <- vcv(tree)
+      }
+    }
+  } else {
+    if(is.null(tree)) {
+      stop('Parameter tree has to be specified in case of NULL tipDists.')
+    }
+    N <- length(tree$tip.label) 
+    names <- tree$tip.label
+    if(is.null(vcvMat)) {
+      vcvMat=vcv(tree)
+    }
+  }
+  
+  ttips <- diag(vcvMat)
+  pairs <- t(sapply(1:N, function(i) {
+    vcvMati <- vcvMat[, i]
+    if(is.null(tipDists)) {
+      tipDistsi <- ttips[i]+ttips-2*vcvMati
+    } else {
+      tipDistsi <- tipDists[i, ]
+    }
+    
+    tipDistsi[i] <- Inf  
+    j <- which.min(tipDistsi)[1]; 
+    c(i, j, tipDistsi[j], vcvMat[i,j])
+  }))
+  colnames(pairs) <- c('i', 'j', 'tau', 't')
+  pp <- data.table(i=as.integer(pairs[, 'i']), j=as.integer(pairs[, 'j']), 
+                   tau=pairs[, 'tau'], t=pairs[, 't'], 
+                   idPair=apply(pairs, 1, function(p) {
+                     if(p['i'] == pairs[p['j'], 'j']) {
+                       cantorPairingNumber(p['i'], p['j'], ordered=FALSE)
+                     } else {
+                       NA
+                     }
+                   }),
+                   i.name=names[pairs[, 'i']])[!is.na(idPair)]
+  
+  if(!is.null(z)) {
+    if(length(z)!=N) {
+      stop('the size of z is different from the number of tips.')
+    }
+    pp[, z:=z[i]]
+    pp[, deltaz:=abs(z[1]-z[2]), by=idPair]
+  }
+  
+  pp[order(idPair)]
+}
+
+
 
 #' Make the ending edges of a tree longer/shorter by addLength
 #' @param tree a phylo object
