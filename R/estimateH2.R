@@ -1,3 +1,20 @@
+# Copyright 2017 Venelin Mitov
+#
+# This file is part of patherit.
+# 
+# patherit is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# patherit is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+
 #' Estimate the heritability of a continuous trait in a phylogenetically 
 #' linked population. 
 #' 
@@ -21,7 +38,6 @@
 #' To disable the fit of a method, simply exclude it from the list or set it to FALSE.
 #' 
 #' @param verbose Logical: should messages be written on the screen at runtime.
-#' @param ... passed to the PP and POUMM::POUMM functions
 #' @details The order of elements in z should match the order of the tips in tree. 
 #' By default the function will run six MCMC chains of length 100,000. Without 
 #' parallelization of the MCMC chains and the likelihood calculation, this may 
@@ -65,7 +81,7 @@
 #' @export
 estimateH2 <- function(z, tree, 
                        methods = list(PP = TRUE, PMM = TRUE, POUMM = TRUE), 
-                       verbose = FALSE, ...) {
+                       verbose = FALSE) {
   
   if(!(is.numeric(z) & class(tree) == 'phylo' & 
        length(z) == length(tree$tip.label)) ) {
@@ -111,7 +127,7 @@ estimateH2 <- function(z, tree,
         cat("Performning", names(methods)[i], "analysis...\n")
       }
       
-      fit <- do.call(PP, c(specPP2, list(...)))
+      fit <- do.call(PP, specPP2)
       
       res$fits[[names(methods)[i]]] <- fit
       res$summaries[[names(methods)[i]]] <- summary(fit)
@@ -148,7 +164,7 @@ estimateH2 <- function(z, tree,
         cat("Performing", names(methods)[i], "analysis...\n")
       }
       
-      fit <- POUMM(z, tree, spec = specPOUMM2, verbose = verbosePOUMM, ...)
+      fit <- POUMM(z, tree, spec = specPOUMM2, verbose = verbosePOUMM)
       
       res$fits[[names(methods)[i]]] <- fit
       
@@ -185,7 +201,7 @@ estimateH2 <- function(z, tree,
         cat("Performing PMM analysis...\n")
       }
       
-      fit <- POUMM(z, tree, spec = specPMM2, verbose = verbosePMM, ...)
+      fit <- POUMM(z, tree, spec = specPMM2, verbose = verbosePMM)
       
       res$fits[[names(methods)[i]]] <- fit
       

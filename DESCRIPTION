@@ -7,7 +7,7 @@ Author: Venelin Mitov
 Maintainer: <vmitov@gmail.com>
 Description: This package provides methods for simulating the evolution and for
   estimating the heritability of pathogen traits. The simulation method assumes
-  a classical additive model for trait in which the trait-value is formed as a 
+  a classical additive model for a trait in which the trait-value is formed as a 
   sum of single-locus and epistatic effects from the pathogen genotype, the host
   immune system type and a white noise term representing the combination of 
   unknown non-heritable factors such as unknown pathogen and host immune system

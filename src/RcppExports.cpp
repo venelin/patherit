@@ -7,7 +7,7 @@ using namespace Rcpp;
 
 // cumulativeRows
 NumericMatrix cumulativeRows(NumericMatrix M);
-RcppExport SEXP patherit_cumulativeRows(SEXP MSEXP) {
+RcppExport SEXP _patherit_cumulativeRows(SEXP MSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -18,7 +18,7 @@ END_RCPP
 }
 // decideEvents
 NumericVector decideEvents(NumericVector events, LogicalMatrix probs_random);
-RcppExport SEXP patherit_decideEvents(SEXP eventsSEXP, SEXP probs_randomSEXP) {
+RcppExport SEXP _patherit_decideEvents(SEXP eventsSEXP, SEXP probs_randomSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -27,4 +27,15 @@ BEGIN_RCPP
     rcpp_result_gen = Rcpp::wrap(decideEvents(events, probs_random));
     return rcpp_result_gen;
 END_RCPP
+}
+
+static const R_CallMethodDef CallEntries[] = {
+    {"_patherit_cumulativeRows", (DL_FUNC) &_patherit_cumulativeRows, 1},
+    {"_patherit_decideEvents", (DL_FUNC) &_patherit_decideEvents, 2},
+    {NULL, NULL, 0}
+};
+
+RcppExport void R_init_patherit(DllInfo *dll) {
+    R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+    R_useDynamicSymbols(dll, FALSE);
 }

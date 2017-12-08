@@ -2,10 +2,10 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 cumulativeRows <- function(M) {
-    .Call('patherit_cumulativeRows', PACKAGE = 'patherit', M)
+    .Call('_patherit_cumulativeRows', PACKAGE = 'patherit', M)
 }
 
 decideEvents <- function(events, probs_random) {
-    .Call('patherit_decideEvents', PACKAGE = 'patherit', events, probs_random)
+    .Call('_patherit_decideEvents', PACKAGE = 'patherit', events, probs_random)
 }
 
