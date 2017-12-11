@@ -15,70 +15,71 @@
 # You should have received a copy of the GNU General Public License
 # along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 
-#' Estimate the heritability of a continuous trait in a phylogenetically 
-#' linked population. 
-#' 
-#' @description This function estimates the broad-sense heritability of a trait
-#' from trait measurements at the tips of a phylogenetic tree connecting the carriers
-#' of this trait. By default the function performs a phylogenetic pair (PP) analysis,
-#' a phylogenetic mixed model fit (PMM) and a phylogenetic Ornstein-Uhlenbeck 
-#' mixed model fit (POUMM) and returns an object of class H2Analysis. Use the 
-#' generic functions summary and plot to see the heritability estimates.
-#' 
-#' @param z A numeric vector of length equal to the number of tips in tree matching
-#' their order.
-#' @param tree A phylo object. 
-#' @param methods A named list of logical values and/or lists, specifying each 
-#' estimating method. The names of the elements should start with PP, POUMM,
-#' or PMM. For example, specifying \code{methods = list(PP = TRUE, POUMM_1 = TRUE, 
-#' POUMM_2 = list(nSamplesMCMC = 1e6), PMM = TRUE)} will cause the methods PP and 
-#' PMM to be executed with default settings, while the method POUMM will be 
-#' executed with a million iterations in each MCMC chain. 
-#' The values in the list methods should be either logical or lists.
-#' To disable the fit of a method, simply exclude it from the list or set it to FALSE.
-#' 
-#' @param verbose Logical: should messages be written on the screen at runtime.
-#' @details The order of elements in z should match the order of the tips in tree. 
-#' By default the function will run six MCMC chains of length 100,000. Without 
-#' parallelization of the MCMC chains and the likelihood calculation, this may 
-#' take more than 20 minutes to run on a tree of 1000 tips.
-#' 
-#' @return an S3 object of class H2Analysis. Use the generic functions summary
-#' and plot to display the results.
+#'Estimate the heritability of a continuous trait in a phylogenetically linked
+#'population.
 #'
-#' @import POUMM
-#' 
-#' @seealso \code{\link{PP}}, \code{\link{POUMM::POUMM}}, \code{\link{POUMM::specifyPOUMM}}.
-#'  
-#' @examples 
+#'@description This function estimates the broad-sense heritability of a trait
+#'  from trait measurements at the tips of a phylogenetic tree connecting the
+#'  carriers of this trait. By default the function performs a phylogenetic pair
+#'  (PP) analysis, a phylogenetic mixed model fit (PMM) and a phylogenetic
+#'  Ornstein-Uhlenbeck mixed model fit (POUMM) and returns an object of class
+#'  H2Analysis. Use the generic functions summary and plot to see the
+#'  heritability estimates.
+#'
+#'@param z A numeric vector of length equal to the number of tips in tree
+#'  matching their order.
+#'@param tree A phylo object.
+#'@param methods A named list of logical values and/or lists, specifying each
+#'  estimating method. The names of the elements should start with PP, POUMM, or
+#'  PMM. For example, specifying \code{methods = list(PP = TRUE, POUMM_1 = TRUE,
+#'  POUMM_2 = list(nSamplesMCMC = 1e6), PMM = TRUE)} will cause the methods PP
+#'  and PMM to be executed with default settings, while the method POUMM will be
+#'  executed with a million iterations in each MCMC chain. The values in the
+#'  list methods should be either logical or lists. To disable the fit of a
+#'  method, simply exclude it from the list or set it to FALSE.
+#'
+#'@param verbose Logical: should messages be written on the screen at runtime.
+#'@details The order of elements in z should match the order of the tips in
+#'  tree. By default the function will run six MCMC chains of length 100,000.
+#'  Without parallelization of the MCMC chains and the likelihood calculation,
+#'  this may take more than 20 minutes to run on a tree of 1000 tips.
+#'
+#'@return an S3 object of class H2Analysis. Use the generic functions summary
+#'  and plot to display the results.
+#'
+#'@import POUMM
+#'
+#'@seealso \code{\link{PP}}, \code{\link{POUMM::POUMM}},
+#'  \code{\link{POUMM::specifyPOUMM}}.
+#'
+#' @examples
 #' \dontrun{
 #' # Please, read the package vignette for more detailed examples.
 #' N <- 200
 #' tr <- ape::rtree(N)
 #' z <- POUMM::rVNodesGivenTreePOUMM(tr, 0, 2, 3, 1, 1)[1:N]
-#' 
+#'
 #' # Enable parallel execution of the POUMM and PMM chains
-#' 
+#'
 #' cluster <- parallel::makeCluster(parallel::detectCores(logical = FALSE))
 #' doParallel::registerDoParallel(cluster)
-#' 
+#'
 #' H2Analysis <- estimateH2(z, tree)
-#' 
+#'
 #' parallel::stopCluster(cluster)
-#' 
+#'
 #' summary(H2Analysis)
 #' }
-#' 
-#'@references 
-#'  Mitov, V. and Stadler, T. (2016). The heritability of pathogen traits - 
-#'  definitions and estimators. bioRxiv, 058503
-#'  doi: https://doi.org/10.1101/058503
-#'  
-#'  Mitov, V., and Stadler, T. (2017). Fast and Robust Inference of Phylogenetic 
-#'  Ornstein-Uhlenbeck Models Using Parallel Likelihood Calculation. bioRxiv, 115089. 
-#'  https://doi.org/10.1101/115089
-#'  
-#' @export
+#'
+#'@references Mitov, V. and Stadler, T. (2016). The heritability of pathogen
+#'traits - definitions and estimators. bioRxiv, 058503 doi:
+#'https://doi.org/10.1101/058503
+#'
+#'Mitov, V., and Stadler, T. (2017). Fast and Robust Inference of Phylogenetic
+#'Ornstein-Uhlenbeck Models Using Parallel Likelihood Calculation. bioRxiv,
+#'115089. https://doi.org/10.1101/115089
+#'
+#'@export
 estimateH2 <- function(z, tree, 
                        methods = list(PP = TRUE, PMM = TRUE, POUMM = TRUE), 
                        verbose = FALSE) {
@@ -498,6 +499,7 @@ plotCorrProfile <- function(object,
 #' of regression slope
 #' 
 #' @import data.table
+#' @importFrom toyepidemic extractDRCouples calcValue
 #' 
 #' @export
 b <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE, 
@@ -550,17 +552,22 @@ b <- function(epidemic=NULL, data=NULL, GEValues, sampledOnly=TRUE,
 #' Estimating intraclass correlation (ICC) through ANOVA
 #' @param epidemic a list of objects returned from simulateEpidemic
 #' @param data NULL or a data.table such as the element gen in an epidemic list
-#' @param GEValues genotype-environment trait values for calculating the z-values; if NULL it is assumed that the 
-#' z-values are already in data, or epidemic$gen.
-#' @param sampledOnly,activeOnly,tMin,tMax,firstN,lastN parameters passed to extractPop
-#' @param by a character string which can be evaluated as expression in the by clause of data.table
-#' the times of sampling for the individuals; otherwise, this would be the times of infection.
-#' @param report a logical indicating what result should be returned. If FALSE, only the ICC value is returned, 
-#' otherwise a list of statistics from the ANOVA calculation
+#' @param GEValues genotype-environment trait values for calculating the
+#'   z-values; if NULL it is assumed that the z-values are already in data, or
+#'   epidemic$gen.
+#' @param sampledOnly,activeOnly,tMin,tMax,firstN,lastN parameters passed to
+#'   extractPop
+#' @param by a character string which can be evaluated as expression in the by
+#'   clause of data.table the times of sampling for the individuals; otherwise,
+#'   this would be the times of infection.
+#' @param report a logical indicating what result should be returned. If FALSE,
+#'   only the ICC value is returned, otherwise a list of statistics from the
+#'   ANOVA calculation
 #' @return See report parameter
-#' 
+#'
 #' @import data.table
-#' 
+#' @importFrom toyepidemic extractPop calcValue
+#'
 #' @export
 rA <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf,
                firstN=Inf, lastN=Inf, by=list('gene'), 
@@ -646,15 +653,20 @@ rA <- function(epidemic=NULL, data=NULL, GEValues=NULL, sampledOnly=TRUE, active
 
 
 #' Broad-sense heritability of a pathogen trait
-#' @param epidemic a list of objects returned from simulateEpidemic
+#' @param epidemic a list of objects returned from simulateEpidemic (see
+#'   toyepidemic package)
 #' @param data NULL or a data.table such as the element gen in an epidemic list
-#' @param GEValues genotype-environment trait values for calculating the z-values; if NULL it is assumed that the 
-#' z-values are already in data, or epidemic$gen.
-#' @param sampledOnly,activeOnly,tMin,tMax,firstN,lastN parameters passed to extractPop
-#' @return numeric indicating the estimated heritability for infected individuals in the population. 
-#'  
+#' @param GEValues genotype-environment trait values for calculating the
+#'   z-values; if NULL it is assumed that the z-values are already in data, or
+#'   epidemic$gen.
+#' @param sampledOnly,activeOnly,tMin,tMax,firstN,lastN parameters passed to
+#'   extractPop
+#' @return numeric indicating the estimated heritability for infected
+#'   individuals in the population.
+#'
 #' @import data.table
-#' 
+#' @importFrom toyepidemic extractPop calcValue
+#'
 #' @export
 R2adj <- function(epidemic=NULL, data=NULL, GEValues=NULL, 
                   sampledOnly=TRUE, activeOnly=FALSE, tMin=0, tMax=Inf, 
@@ -684,21 +696,21 @@ R2adj <- function(epidemic=NULL, data=NULL, GEValues=NULL,
 }
 
 
-#' Bootstrap ANOVA 
+#' Bootstrap ANOVA
 #' @param i integer vector identifiers of the individuals
-#' @param idPair integer vector showing the membership of individuals in pairs 
-#' or bigger classes
+#' @param idPair integer vector showing the membership of individuals in pairs
+#'   or bigger classes
 #' @param z numeric vector of phenotypes
-#' @param bootstraps integer the number of bootstrap samples to perform 
-#' (default 1000)
+#' @param bootstraps integer the number of bootstrap samples to perform
+#'  (default 1000)
 #' @param ... other columns that are appended to the resulting data.table if
-#' as.dt = TRUE. This parameter is supplied for convinience only.
+#'  as.dt = TRUE. This parameter is supplied for convinience only.
 #' @return list iwth estimated rA and 95% confidence intervals
 #' @details the function performs 1000 bootstraps
-#' 
-#' @import data.table 
+#'
+#' @import data.table
 #' @import boot
-#' 
+#'
 #' @export
 rAboot <- function(i, idPair, z, bootstraps=1000, as.dt=FALSE, ...) {
   stats <- c('rA', 'sigmaG2', 'sigmae2', 'F')
@@ -1151,17 +1163,18 @@ plot.summary.PP <- function(object, statistic='rA',
 #' Scatter plot of phylogenetic pairs
 #' @param z numeric vector of phenotypes
 #' @param tree a phylo object with tip-labels corresponding to the entries in z
-#' @param ppAnalysis a list resulting from a call to analyseCPPs on the same tree and z.
-#' @param CPPthr numeric indicating the maximum phylogenetic distance separating a 
-#' closest phylogenetic pair
-#' @param ruleOutXIQR numeric a multiplier used to define outlier CPPs as defined in 
-#' the referenced article.
-#' @param zName,treeName characters used when the parameter z is a list; indicate the
-#' corresponding names in the list
+#' @param ppAnalysis a list resulting from a call to analyseCPPs on the same
+#'   tree and z.
+#' @param CPPthr numeric indicating the maximum phylogenetic distance separating
+#'   a closest phylogenetic pair
+#' @param ruleOutXIQR numeric a multiplier used to define outlier CPPs as
+#'   defined in the referenced article.
+#' @param zName,treeName characters used when the parameter z is a list;
+#'   indicate the corresponding names in the list
 #' @param xlim,ylim,xlab,ylab graphical parameters passed to plot
-#' 
-#' @import data.table 
-#' 
+#'
+#' @import data.table
+#'
 #' @export
 scatterPlotPPs <- function(z, tree, ppAnalysis, CPPthr=10^-4, ruleOutXIQR=1.5, 
                            zName='z', treeName='tree', 

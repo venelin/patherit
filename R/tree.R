@@ -47,6 +47,7 @@ edgesFrom <- function(tree, n) {
 #' @return
 #'   a vector of size the number of nodes in the tree (tips, root, internal)
 #'   containing the time from the root to the corresponding node in the tree
+#' @importFrom ape reorder.phylo
 #' @export
 nodeTimes <- function(tree, tipsOnly=FALSE) {
   rtree <- reorder(tree, 'postorder')

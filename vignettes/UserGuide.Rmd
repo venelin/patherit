@@ -1,0 +1,68 @@
+---
+title: "A User Guide to the patherit R-package"
+author: "Venelin Mitov"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    fig_caption: yes
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{A User Guide to The POUMM R-package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+# Make results reproducible
+set.seed(1)
+library(ggplot2)
+library(data.table)
+knitr::opts_chunk$set(cache = FALSE)
+options(digits = 4)
+
+# set this to FALSE to disable cache and run all MCMC-fits.
+useCachedResults <- file.exists("UserGuideCache.RData") & TRUE
+
+```
+
+```{r}
+library(toyepidemic)
+library(patherit)
+```
+
+# Example on a simulated epidemic
+We use an epidemic simulated using the toyepidemic package:
+```{r}
+load("epid1.RData")
+```
+
+## Extracting phylogenetic and phenotypic data from the epidemic
+```{r}
+tree <- extractTree(epidemic)
+pop <- extractPop(epidemic, ids=tree$tip.label)
+pop[, z:=calcValue(env, gene, e, GEValues=epidemic$GEValues)]
+z <- pop[list(tree$tip.label), z]
+```
+
+## Estimating the heritability usng PP, POUMM and PMM methods.
+```{r message=FALSE, warning=FALSE, results="hide"}
+H2Analysis <- estimateH2(z, tree, 
+                         methods = list(
+                           PP = list(bootstraps=100, verbose=FALSE), 
+                           POUMM = list(nSamplesMCMC = 0, 
+                                        verbose = FALSE), 
+                           PMM = list(nSamplesMCMC = 0, 
+                              verbose = FALSE)))
+```
+
+## Summarizing the estimates:
+```{r}
+summary(H2Analysis)
+```
+
+## Comparing to the true value
+```{r}
+R2adj(data=pop, activeOnly = TRUE)
+```
+
