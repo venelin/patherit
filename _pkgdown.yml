@@ -1,0 +1,15 @@
+url: http://venelin.github.io/patherit
+
+navbar:
+  title: patherit
+  type: default
+  left:
+  - icon: fa-home fa-lg
+    href: index.html
+  - text: Get started
+    href: articles/UserGuide.html
+  - text: Reference
+    href: reference/index.html
+  - text: News
+    href: news/index.html
+  right: []

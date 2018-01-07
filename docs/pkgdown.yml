@@ -1,0 +1,6 @@
+urls:
+  reference: http://venelin.github.io/patherit/reference
+  article: http://venelin.github.io/patherit/articles
+articles:
+  UserGuide: UserGuide.html
+

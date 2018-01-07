@@ -60,7 +60,6 @@
 #' z <- POUMM::rVNodesGivenTreePOUMM(tr, 0, 2, 3, 1, 1)[1:N]
 #'
 #' # Enable parallel execution of the POUMM and PMM chains
-#'
 #' cluster <- parallel::makeCluster(parallel::detectCores(logical = FALSE))
 #' doParallel::registerDoParallel(cluster)
 #'
@@ -74,10 +73,6 @@
 #'@references Mitov, V. and Stadler, T. (2016). The heritability of pathogen
 #'traits - definitions and estimators. bioRxiv, 058503 doi:
 #'https://doi.org/10.1101/058503
-#'
-#'Mitov, V., and Stadler, T. (2017). Fast and Robust Inference of Phylogenetic
-#'Ornstein-Uhlenbeck Models Using Parallel Likelihood Calculation. bioRxiv,
-#'115089. https://doi.org/10.1101/115089
 #'
 #'@export
 estimateH2 <- function(z, tree, 
@@ -220,7 +215,16 @@ estimateH2 <- function(z, tree,
   res
 }
 
-#' @export
+#' Summarize the estimates from a call to estimateH2
+#' @param object an object of S3 class "H2Analysis" returned from a previous
+#'   call to \code{\link{estimateH2}}.
+#' @param useBootstrapsForPP logical indicating weather bootstrap confidence
+#'   intervals should be used for the PP estimates; defaults to FALSE, in which
+#'   case the confidence intervals are estimated based on an F-statistic.
+#' @param ... additional arguments passed to the summary.PP and summary.POUMM
+#'   functions
+#' @return a data.table 
+#' @export   
 summary.H2Analysis <- function(object, useBootstrapsForPP = FALSE, ...) {
   
   if("H2Analysis" %in% class(object)) {
@@ -489,7 +493,14 @@ plotCorrProfile <- function(object,
   }
 }
 
-#' Regression slope of recipient on donor values in an epidemic
+#' Regression slope of recipient on donor values in an epidemic simulated with
+#' the toyepidemic R-package.
+#' @param epidemic a list returned using the function simulateEpidemic in the 
+#'   package toyepidemic.
+#' @param data a data.table containing donor-recipient couples extracted from an
+#'   epidemic simulated using the 
+#'   \href{https://venelin.github.io/toyepidemic/index.html}{toyepidemic} R
+#'   -package. 
 #' @param sampledOnly logical, indicating if only sampled individuals should be 
 #' included in the heritability calculation
 #' @param tMin,tMax numeric, time interval for which to measure the heritability. 
@@ -1242,8 +1253,8 @@ boxplotTraitAlongTree <- function(z, tree, nGroups=15, ...) {
                    names=names(boxes), cex=.4, border='grey40',
                    at=as.numeric(names(boxes)), 
                    main='', 
-                   xlab='root-tip distance [subst. per site]',
-                   ylab=expression(lg(spVL)))
+                   xlab='Root-tip distance',
+                   ylab="Trait value")
   
   params <- c(params, myParams[setdiff(names(myParams), names(params))])
   

@@ -1,19 +1,36 @@
-# patherit
-Pathogen Trait Heritability
 
-Pathogen traits, such as the virulence of an infection, can vary significantly between patients. A major challenge is to measure the extent to which genetic differences between infecting strains explain the observed variation of the trait. This is quantified by the trait's broad-sense heritability, H^2. The patherit R-package allows to compare various estimators of pathogen trait heritability in data simulated using the `toyepidemic` R-package, and in real epidemiological data. 
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+Patherit: an R-package for estimating the heritability of pathogen traits
+=========================================================================
 
+Pathogen traits, such as the virulence of an infection, can vary significantly between patients. A major challenge is to measure the extent to which genetic differences between infecting strains explain the observed variation of the trait. This is quantified by the trait's broad-sense heritability, H^2. The patherit R-package allows to compare various estimators of pathogen trait heritability in data simulated using the `toyepidemic` R-package, and in real epidemiological data.
 
 The following methods are available:
 
-1. Direct heritability estimator, R_{adj}^2, for data with full genetic and phenotype knowledge.
-2. Donor recipient regression slope, b, for transmission couple data;
-3. Several phylogenetic methods including ANOVA in phylogenetic pairs (PP) and closest phylogenetic pairs (CPP), the phylogenetic heritability estimated using either PMM or POUMM. 
+1.  Direct heritability estimator, *R*<sub>*a**d**j*</sub><sup>2</sup>, for data with full genetic and phenotype knowledge.
+2.  Donor recipient regression slope, b, and intra-class correlation, *r*<sub>*A*</sub>, for transmission couple data;
+3.  Several phylogenetic methods including ANOVA in phylogenetic pairs (PP) and closest phylogenetic pairs (CPP), the phylogenetic heritability estimated using the PMM and the POUMM.
 
-For using the package, read the package [User Guide](./vignettes/UserGuide.Rmd).
+Installing the package
+======================
 
+You can install the most recent version of the package from github:
 
-# License
+``` r
+devtools::install_github(repo="venelin/patherit")
+```
 
-The toyepidemic R-package is licensed under version 3 of the [GNU General Public License](http://www.gnu.org/licenses/.
+Using the package
+=================
 
+For using the package, read the package [Get started](htts://venelin.github.io/patherit/articles/UserGuide.html) guide.
+
+Package source-code
+===================
+
+The package source-code is available on [github](https://github.com/venelin/patherit.git).
+
+Package web-page
+================
+
+Check-out the package [web-page](https://venelin.github.io/patherit/index.html) for the latest news and further documentation.

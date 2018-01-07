@@ -1,16 +1,16 @@
 ---
 title: "A User Guide to the patherit R-package"
 author: "Venelin Mitov"
-date: "`r Sys.Date()`"
 output: 
   rmarkdown::html_vignette:
     fig_caption: yes
     toc: true
     toc_depth: 2
 vignette: >
-  %\VignetteIndexEntry{A User Guide to The POUMM R-package}
+  %\VignetteIndexEntry{A User Guide to the patherit R-package}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+bibliography: REFERENCES.bib
 ---
 
 ```{r setup, include = FALSE}
@@ -19,50 +19,196 @@ set.seed(1)
 library(ggplot2)
 library(data.table)
 knitr::opts_chunk$set(cache = FALSE)
-options(digits = 4)
+options(digits = 2, width=120, scipen = 999)
 
 # set this to FALSE to disable cache and run all MCMC-fits.
 useCachedResults <- file.exists("UserGuideCache.RData") & TRUE
 
-```
-
-```{r}
-library(toyepidemic)
 library(patherit)
 ```
 
-# Example on a simulated epidemic
-We use an epidemic simulated using the toyepidemic package:
+Here we show how to use **patherit** to estimate the broad-sense heritability, $H^2$, of a numeric pathogen trait. $H^2$ is defined as the proportion of the trait variance attributable to genotypic variation in a population of hosts [@Mitov:2016kd]:
+\begin{equation}
+H^2=\frac{\text{Var}(g)}{\text{Var}(z)}
+\end{equation}
+
+Thus, the heritability is a number in the interval [0,1]. The closer $H^2$ is to 1, the higher is the importance of the pathogen genotype versus the host immune system in the formation of the trait. 
+The input data represents a transmission tree connecting a set of infected patients and the patient's trait-values, measured at the moment of diagnosis. The **patherit** package evaluates phylogenetic comparative estimators, i.e. $H_{\bar{t}}^2$, $H_{\infty}^2$ and $H_e^2$ from the PMM and POUMM methods, and pair-correlation estimators, i.e. $r_A$ from the ANOVA-CPP method [@Mitov:2016kd]. The main reason for using different estimators is the need to gain certainty in the estimates and to eliminate potential sources of bias, (e.g. within-host evolution and wrong model assumptions), which can obfuscate the true value of $H^2$ [@Mitov:2016kd]. 
+
+For the purpose of this tutorial, we will use the toy-model epidemic simulated in the [User guide](https://venelin.github.io/toyepidemic/articles/UserGuide.html) of the [toyepidemic](https://venelin.github.io/toyepidemic/index.html) package. 
+
 ```{r}
 load("epid1.RData")
 ```
 
-## Extracting phylogenetic and phenotypic data from the epidemic
-```{r}
-tree <- extractTree(epidemic)
-pop <- extractPop(epidemic, ids=tree$tip.label)
-pop[, z:=calcValue(env, gene, e, GEValues=epidemic$GEValues)]
+## Extracting phylogenetic and phenotypic data from the simulated epidemic
+The code-snippet below extracts the exact transmission tree connecting  a set of
+diagnosed patients during a simulated epidemic outbreak. 
+```{r, results="hide"}
+tree <- toyepidemic::extractTree(epidemic)
+
+# a data.table containing the host-type (env), the infecting strain (gene) and the
+# host specific effect (e) for each infected patient. 
+pop <- toyepidemic::extractPop(epidemic, ids=tree$tip.label)
+
+# use the function calcValue from the toyepidemic package to extract the trait
+# value for each sampled patient.
+pop[, z:=toyepidemic::calcValue(env, gene, e, GEValues=epidemic$GEValues)]
+
+# arrange the trait values in order of the patient-labels in the tree and store
+# them in an external vector.
 z <- pop[list(tree$tip.label), z]
 ```
 
-## Estimating the heritability usng PP, POUMM and PMM methods.
-```{r message=FALSE, warning=FALSE, results="hide"}
-H2Analysis <- estimateH2(z, tree, 
-                         methods = list(
-                           PP = list(bootstraps=100, verbose=FALSE), 
-                           POUMM = list(nSamplesMCMC = 0, 
-                                        verbose = FALSE), 
-                           PMM = list(nSamplesMCMC = 0, 
-                              verbose = FALSE)))
+## Visualizing the data
+```{r, fig.height=8, fig.width=6.8, dev="png", dpi=100}
+plot(ape::ladderize(tree), show.tip.label = FALSE, type="fan", no.margin = TRUE)
+colorFunc <- colorRampPalette(c("blue", "red"))
+colors <- colorFunc(length(tree$tip.label))
+ape::tiplabels(NULL, tip=1:length(tree$tip.label), pch=20, col=colors[order(z)], cex=0.5)
 ```
+
+Qualitatively, the heritability of the trait manifests itself in the similar color for closely related patients on the transmission tree. This is because closely related patients such as closest phylogenetic pairs (CPPs) tend to carry identical pathogen strains. 
+
+```{r, fig.height=4, fig.width=6.8, dev="png", dpi=100}
+patherit::boxplotTraitAlongTree(z, tree, nGroups = 8, boxwex=6)
+```
+
+The absence of a noticeable trend and the relative symmetry of the box-whiskers around the medians suggest that the trait distribution is approximately normal and stationary throughout the epidemic. Thus, we should expect that the POUMM estimates $H_{\bar{t}}^2$ and $H_{\infty}^2$ should be approximately equal. 
+
+## Estimating the heritability using ANOVA-CPP, POUMM and the PMM methods.
+
+```{r, include=FALSE, eval=useCachedResults}
+load("UserGuideCache.RData")
+```
+
+```{r message=FALSE, warning=FALSE, results="hide", eval=!useCachedResults}
+# start a parallel cluster for parallel execution of MCMC chains in the POUMM
+# and PMM fits (explained in the vignette for the POUMM package).
+cluster <- parallel::makeCluster(parallel::detectCores(logical = FALSE))
+doParallel::registerDoParallel(cluster)
+
+H2Analysis <- patherit::estimateH2(z, tree, 
+                                   methods = list(
+                                     PP = list(bootstraps=100, verbose=FALSE), 
+                                     POUMM = list(nSamplesMCMC = 5e5, 
+                                                  verbose = FALSE), 
+                                     PMM = list(nSamplesMCMC = 5e5, 
+                                                verbose = FALSE)))
+```
+
 
 ## Summarizing the estimates:
-```{r}
-summary(H2Analysis)
+```{r message=FALSE, warning=FALSE}
+summary(H2Analysis)[stat%in%c("rA", "H2tMean", "H2e", "H2tInf")]
 ```
 
+## Generating a correlation profile
+It is useful to observe the correlation between phylogenetic pairs as a function of their phylogenetic distance. In the absence of convergent evolution towards the same pathogen, the sequence similarity between transmission partners is supposed to decrease with the time since the transmission events. This is reflected by a decay in the trait correlaiton between transmission partners and phylogenetic pairs, respectively. The correlation profile represents a suite of estimates of the intra-class correlation ($r_A$) in a stratification of the phylogenetic patients by their phylogenetic distance. The patherit package allows to produce such a profile for the original data, and for data simulated under the ML fits of the POUMM and the PMM. This is done with the `patherit::corrProfile()` function:
+
+```{r message=FALSE, warning=FALSE, eval=!useCachedResults}
+corrPr <- patherit::corrProfile(H2Analysis)
+```
+
+Then, we use the function `patherit::plotCorrProfile()` to plot the correlation values
+in different stratifications (medians, quartiles, quantiles, deciles, etc...):
+
+```{r fig.height=6.8, fig.width=6.8, warning=FALSE}
+patherit::plotCorrProfile(H2Analysis, corrPr)
+```
+Notice that the PMM estimates remain high for all phylogenetic distances, while the true data and the simulations under the POUMM ML fit are showing a decline in the correlation between phylogenetic pairs with phylogenetic distance. This shows that the PMM cannot model the decay in correlaiton [@Mitov:2016kd].
+
 ## Comparing to the true value
+For the toy-model simulation, we know the true value of $H^2$. This is given by the direct estimator - the coefficient of determination, $R_{adj}^2$, calculated over a grouping of the host population by identical infecting strain:
+
 ```{r}
 R2adj(data=pop, activeOnly = TRUE)
 ```
 
+We see that the true value falls well within the 95\% CI of all estimators except, the estimators $H_e^2$ from the PMM method. This is due to the fact that the PMM has over-estimated the non-heritable variance $\sigma_e^2$ - another manifestation of the PMM's inability to model the decay of correlation between phylogenetic pairs. 
+
+## Randomization test
+The randomization test consists in checking that the estimated heritability is insignificant if the trait values have been shuffled randomly between the sampled patients:
+```{r, include=FALSE, eval=useCachedResults}
+zR <- H2AnalysisR$z
+pop[, z2:=zR]
+```
+
+```{r, echo=TRUE, eval=!useCachedResults}
+pop[, z2:=sample(z)]
+zR <- pop[, z2]
+```
+
+
+```{r message=FALSE, warning=FALSE, results="hide", eval=!useCachedResults}
+H2AnalysisR <- estimateH2(zR, tree, 
+                         methods = list(
+                           PP = list(bootstraps=100, verbose=FALSE), 
+                           POUMM = list(nSamplesMCMC = 5e5, 
+                                        verbose = FALSE), 
+                           PMM = list(nSamplesMCMC = 5e5, 
+                              verbose = FALSE)))
+
+parallel::stopCluster(cluster)
+```
+
+### Summarizing the estimates:
+```{r message=FALSE, warning=FALSE}
+summary(H2AnalysisR)[stat%in%c("rA", "H2tMean", "H2e", "H2tInf")]
+```
+
+### Correlation profile
+```{r message=FALSE, warning=FALSE, eval=!useCachedResults}
+corrPrR <- corrProfile(H2AnalysisR)
+```
+
+```{r fig.height=6.8, fig.width=6.8, warning=FALSE}
+plotCorrProfile(H2AnalysisR, corrPrR)
+```
+
+```{r include=FALSE, eval=!useCachedResults}
+save(H2Analysis, H2AnalysisR, corrPr, corrPrR, file="UserGuideCache.RData")
+```
+
+### Comparing to the true value in the randomized data
+```{r}
+pop[, z:=z2]
+
+# should be insignificant
+R2adj(data=pop, activeOnly = TRUE)
+```
+
+# Packages used
+```{r create-references, echo=FALSE, include=FALSE, eval=TRUE}
+treeProcessing <- c("ape")
+data <- c("data.table")
+poumm <- c("POUMM")
+testing <- c("testthat")
+boot <- c("boot")
+ 
+packagesUsed <- c(treeProcessing, data, poumm, boot, testing)
+
+printPackages <- function(packs) {
+  res <- ""
+  for(i in 1:length(packs)) {
+    res <- paste0(res, paste0(packs[i], ' v', packageVersion(packs[i]), ' [@R-', packs[i], ']'))
+    if(i < length(packs)) {
+      res <- paste0(res, ', ')
+    }
+  }
+  res
+}
+
+# Write bib information (this line is executed manually and the bib-file is edited manually after that)
+#knitr::write_bib(packagesUsed, file = "./REFERENCES-R.bib")
+```
+
+
+Apart from base R functionality, the patherit package uses a number of 3rd party R-packages:
+
+* For tree processing: `r printPackages(treeProcessing)`;
+* For reporting: `r printPackages(data)`;
+* For the POUMM and PP estimates: `r printPackages(c(poumm, boot))`;
+* For testing: `r printPackages(testing)`.
+
+# References
