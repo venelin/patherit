@@ -3,7 +3,7 @@
 Patherit: an R-package for estimating the heritability of pathogen traits
 =========================================================================
 
-Pathogen traits, such as the virulence of an infection, can vary significantly between patients. A major challenge is to measure the extent to which genetic differences between infecting strains explain the observed variation of the trait. This is quantified by the trait's broad-sense heritability, *H*<sup>2</sup>. The patherit R-package allows to compare various estimators of pathogen trait heritability in data simulated using the `toyepidemic` R-package, and in real epidemiological data.
+Pathogen traits, such as the virulence of an infection, can vary significantly between patients. A major challenge is to measure the extent to which genetic differences between infecting strains explain the observed variation of the trait. This is quantified by the trait's broad-sense heritability, *H*<sup>2</sup>. The patherit R-package allows to compare various estimators of pathogen trait heritability in data simulated using the [toyepidemic](https://venelin.github.io/toyepidemic/index.html) R-package, and in real epidemiological data.
 
 The following methods are available:
 
@@ -23,7 +23,7 @@ devtools::install_github(repo="venelin/patherit")
 Using the package
 =================
 
-For using the package, read the package [Get started](htts://venelin.github.io/patherit/articles/UserGuide.html) guide.
+For using the package, read the package [Get started](https://venelin.github.io/patherit/articles/UserGuide.html) guide.
 
 Package source-code
 ===================
