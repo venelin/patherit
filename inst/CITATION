@@ -1,0 +1,19 @@
+citHeader("To cite patherit in publications use:")
+
+citEntry(entry = "Article",
+  title        = "A Practical Guide to Estimating the Heritability of Pathogen Traits",
+  author       = personList(as.person("Venelin Mitov"),
+                   as.person("Tanja Stadler")),
+  journal      = "Molecular Biology and Evolution",
+  year         = "2018",
+  volume       = "",
+  number       = "",
+  pages        = "",
+  url          = "https://doi.org/10.1093/molbev/msx328",
+
+  textVersion  =
+  paste("Venelin Mitov, Tanja Stadler (2018).",
+        "A Practical Guide to Estimating the Heritability of Pathogen Traits",
+        "MBE",
+        "URL https://doi.org/10.1093/molbev/msx328")
+)
